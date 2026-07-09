@@ -1,0 +1,128 @@
+.np-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.np-card {
+  width: 100%;
+  max-width: 680px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px 36px;
+}
+
+.np-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.np-header h2 { font-size: 20px; font-weight: 700; }
+
+.np-cancel {
+  font-size: 13px;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.np-cancel:hover { color: var(--text-primary); border-color: var(--text-dim); }
+
+.np-form { display: flex; flex-direction: column; gap: 20px; }
+
+.np-field { display: flex; flex-direction: column; gap: 7px; position: relative; }
+
+.np-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.np-optional { font-weight: 400; color: var(--text-dim); }
+.np-required { color: var(--accent); }
+
+.np-field input,
+.np-field textarea {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s;
+}
+
+.np-field input::placeholder,
+.np-field textarea::placeholder { color: var(--text-dim); }
+
+.np-field input:focus,
+.np-field textarea:focus { border-color: var(--accent); }
+
+.np-count {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.np-count.warn { color: var(--red); }
+
+.np-error {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  color: var(--red);
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+
+.np-submit {
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 12px;
+  border-radius: 8px;
+  transition: background 0.15s, opacity 0.15s;
+}
+.np-submit:hover:not(:disabled) { background: var(--accent-dim); }
+.np-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.np-file-input {
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.np-file-chosen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.np-file-remove {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.np-file-remove:hover { color: var(--red); }
+
+@media (max-width: 768px) {
+  .np-wrap { padding: 0; }
+  .np-card { padding: 20px 16px; border-radius: 10px; }
+  .np-header { margin-bottom: 20px; }
+}

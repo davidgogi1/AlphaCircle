@@ -1,0 +1,142 @@
+.up-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.up-back {
+  align-self: flex-start;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+.up-back:hover { color: var(--text-primary); }
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.up-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+}
+
+
+.up-header-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.up-username {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.up-bio {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.up-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.up-stats strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.up-follow-btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  align-self: flex-start;
+}
+.up-follow-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #000;
+}
+.up-follow-btn.following {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+.up-follow-btn.following:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(248,81,73,0.08);
+}
+.up-follow-btn.self {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+.up-follow-btn.self:hover { border-color: var(--accent); color: var(--accent); background: none; }
+.up-follow-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Detail chips ───────────────────────────────────────────────────── */
+.up-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.up-detail-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ── Posts ──────────────────────────────────────────────────────────── */
+.up-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.up-status {
+  text-align: center;
+  padding: 40px 0;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+.up-status.error { color: var(--red); }
+
+.up-posts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .up-header { padding: 16px; gap: 14px; }
+  .up-avatar { width: 52px; height: 52px; font-size: 18px; }
+  .up-username { font-size: 17px; }
+  .up-follow-btn { padding: 7px 14px; font-size: 12px; }
+}

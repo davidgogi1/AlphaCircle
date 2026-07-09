@@ -1,0 +1,62 @@
+.quick-takes { margin-bottom: 28px; }
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.section-title { font-size: 16px; font-weight: 700; }
+.see-all { font-size: 13px; color: var(--accent); cursor: pointer; }
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.video-card {
+  background: var(--bg-card);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.video-card:hover { transform: translateY(-2px); }
+
+.video-thumb {
+  aspect-ratio: 16/9;
+  background: linear-gradient(135deg, #1a2a3a, #0f2030);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.play-btn {
+  width: 40px;
+  height: 40px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  backdrop-filter: blur(4px);
+}
+
+.video-duration {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-size: 10px;
+  background: rgba(0,0,0,0.6);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.video-info { padding: 10px 12px; }
+.video-title { font-size: 12px; font-weight: 600; line-height: 1.4; margin-bottom: 4px; }
+.video-author { font-size: 11px; color: var(--text-dim); }

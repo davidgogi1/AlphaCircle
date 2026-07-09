@@ -1,0 +1,75 @@
+.rp-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.rp-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--text-dim);
+  padding: 5px 12px;
+  border-radius: 20px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.rp-trigger:hover   { background: var(--bg-hover); color: var(--text-primary); }
+.rp-trigger.reacted { color: var(--accent); }
+.rp-trigger span    { font-size: 13px; font-weight: 600; }
+
+.rp-default-icon {
+  filter: grayscale(1) opacity(0.55);
+}
+
+.rp-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  padding: 6px 10px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px) scale(0.95);
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 50;
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+/* Invisible bridge so cursor moving from trigger → picker doesn't break hover */
+.rp-picker::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
+
+.rp-wrap:hover .rp-picker,
+.rp-picker.open {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateY(0) scale(1);
+}
+
+.rp-emoji {
+  font-size: 22px;
+  padding: 4px;
+  border-radius: 50%;
+  transition: transform 0.1s, background 0.1s;
+  line-height: 1;
+}
+.rp-emoji:hover  { transform: scale(1.35); background: var(--bg-hover); }
+.rp-emoji.active { transform: scale(1.2);  background: rgba(0,201,177,0.15); }
+
+/* Compact variant for comment reactions */
+.rp-compact .rp-trigger         { padding: 3px 8px; font-size: 12px; }
+.rp-compact .rp-trigger span    { font-size: 11px; }
+.rp-compact .rp-emoji           { font-size: 18px; padding: 3px; }
+.rp-compact .rp-picker          { padding: 4px 8px; gap: 2px; }

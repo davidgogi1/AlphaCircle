@@ -1,0 +1,79 @@
+.rm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(2px);
+}
+
+.rm-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 360px;
+  max-height: 480px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.rm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.rm-title { font-size: 15px; font-weight: 700; }
+.rm-close {
+  font-size: 14px; color: var(--text-dim);
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.rm-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.rm-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.rm-tab {
+  font-size: 13px; font-weight: 600;
+  padding: 5px 12px; border-radius: 20px;
+  color: var(--text-dim); white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.rm-tab:hover  { background: var(--bg-hover); color: var(--text-primary); }
+.rm-tab.active { background: var(--bg-card);  color: var(--accent); }
+
+.rm-list { overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 4px; }
+
+.rm-status { text-align: center; padding: 24px 0; font-size: 13px; color: var(--text-dim); }
+
+.rm-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px;
+  transition: background 0.12s;
+}
+.rm-row:hover { background: var(--bg-hover); }
+
+.rm-avatar {
+  width: 34px; height: 34px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #000; flex-shrink: 0;
+}
+.rm-username { font-size: 14px; font-weight: 600; flex: 1; }
+.rm-emoji    { font-size: 18px; }
+
+@media (max-width: 480px) {
+  .rm-modal { width: calc(100vw - 32px); }
+}

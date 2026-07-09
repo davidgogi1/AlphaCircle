@@ -1,0 +1,27 @@
+.feed-posts { display: flex; flex-direction: column; gap: 32px; }
+.feed-section { display: flex; flex-direction: column; gap: 0; }
+.feed-section-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+
+.feed-trending-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.feed-status { text-align: center; padding: 40px 0; color: var(--text-dim); font-size: 14px; }
+.feed-status.error { color: var(--red); }
+
+.feed-empty {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 60px 0; text-align: center;
+}
+.feed-empty-icon { font-size: 48px; }
+.feed-empty h3   { font-size: 18px; font-weight: 700; }
+.feed-empty p    { font-size: 14px; color: var(--text-dim); }
+.feed-empty-btn  {
+  margin-top: 4px;
+  background: var(--accent); color: #000;
+  font-weight: 700; font-size: 14px;
+  padding: 10px 24px; border-radius: 20px;
+  transition: background 0.15s;
+}
+.feed-empty-btn:hover { background: var(--accent-dim); }

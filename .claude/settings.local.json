@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsx *)",
+      "Bash(curl -s http://localhost:5000/api/posts/trending -H \"Authorization: Bearer test\")",
+      "Bash(kill %1)",
+      "Bash(npx tsx -e ' *)"
+    ]
+  }
+}

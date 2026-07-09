@@ -1,0 +1,195 @@
+.post-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  transition: border-color 0.15s;
+}
+.post-item:hover { border-color: #444d59; }
+
+.pi-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.pi-meta    { display: flex; flex-direction: column; gap: 2px; }
+.pi-username{ font-size: 14px; font-weight: 700; }
+.pi-time    { font-size: 12px; color: var(--text-dim); }
+.pi-username-link { cursor: pointer; transition: color 0.15s; }
+.pi-username-link:hover { color: var(--accent); }
+
+.pi-actions { margin-left: auto; display: flex; gap: 6px; }
+.pi-action-btn {
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+  border: 1px solid var(--border); color: var(--text-dim);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.pi-action-btn.edit:hover   { color: var(--accent); border-color: var(--accent); background: rgba(0,201,177,0.08); }
+.pi-action-btn.delete:hover { color: var(--red);    border-color: var(--red);    background: rgba(248,81,73,0.08); }
+
+.pi-title   { font-size: 16px; font-weight: 700; margin-bottom: 8px; line-height: 1.4; }
+.pi-content { font-size: 14px; line-height: 1.65; color: var(--text-muted); white-space: pre-wrap; }
+
+/* Reaction summary chips */
+.pi-reaction-summary {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 10px; cursor: pointer;
+}
+.pi-reaction-chip {
+  font-size: 13px; background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: 20px;
+  padding: 2px 10px; transition: border-color 0.15s;
+}
+.pi-reaction-chip:hover { border-color: var(--accent); }
+
+/* Action bar */
+.pi-bar {
+  display: flex; gap: 4px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--border);
+}
+.pi-bar-btn {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 14px; color: var(--text-dim);
+  padding: 5px 12px; border-radius: 20px;
+  transition: background 0.15s, color 0.15s;
+}
+.pi-bar-btn:hover  { background: var(--bg-hover); color: var(--text-primary); }
+.pi-bar-btn span   { font-size: 13px; font-weight: 600; }
+.pi-bar-label      { font-size: 13px; }
+
+.pi-save-btn       { margin-left: auto; }
+.pi-save-btn.saved { color: var(--accent); }
+
+/* Edit form */
+.pi-edit-form { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.pi-edit-input, .pi-edit-textarea {
+  background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-size: 14px; color: var(--text-primary); font-family: inherit;
+  outline: none; resize: vertical; transition: border-color 0.15s;
+}
+.pi-edit-input:focus, .pi-edit-textarea:focus { border-color: var(--accent); }
+.pi-error { font-size: 12px; color: var(--red); }
+.pi-edit-btns { display: flex; gap: 8px; }
+.pi-save-btn {
+  background: var(--accent); color: #000; font-weight: 700;
+  font-size: 13px; padding: 7px 16px; border-radius: 7px;
+  transition: background 0.15s, opacity 0.15s;
+}
+.pi-save-btn:disabled              { opacity: 0.5; cursor: not-allowed; }
+.pi-save-btn:not(:disabled):hover  { background: var(--accent-dim); }
+.pi-cancel-btn {
+  font-size: 13px; color: var(--text-dim); padding: 7px 14px;
+  border: 1px solid var(--border); border-radius: 7px; transition: color 0.15s;
+}
+.pi-cancel-btn:hover { color: var(--text-primary); }
+
+/* Attachment edit controls */
+.pi-edit-att {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pi-edit-att-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.pi-edit-att-name { flex: 1; }
+.pi-edit-att-new  { font-size: 11px; color: var(--accent); margin-left: 4px; }
+
+.pi-edit-att-remove {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.pi-edit-att-remove:hover { color: var(--red); border-color: var(--red); }
+
+.pi-edit-att-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  transition: background 0.15s;
+}
+.pi-edit-att-label:hover { background: rgba(0, 201, 177, 0.08); }
+
+.pi-edit-att-hidden { display: none; }
+
+/* Delete confirm */
+.pi-confirm-delete {
+  margin-top: 4px; display: flex; flex-direction: column; gap: 12px;
+  background: rgba(248,81,73,0.07); border: 1px solid rgba(248,81,73,0.25);
+  border-radius: 8px; padding: 14px 16px; font-size: 14px; color: var(--text-muted);
+}
+.pi-confirm-btns { display: flex; gap: 8px; }
+.pi-confirm-yes {
+  font-size: 13px; font-weight: 700; background: var(--red); color: #fff;
+  padding: 6px 14px; border-radius: 6px; transition: opacity 0.15s;
+}
+.pi-confirm-yes:hover { opacity: 0.85; }
+.pi-confirm-no {
+  font-size: 13px; color: var(--text-dim); padding: 6px 14px;
+  border: 1px solid var(--border); border-radius: 6px; transition: color 0.15s;
+}
+.pi-confirm-no:hover { color: var(--text-primary); }
+
+/* Comments */
+.pi-comments { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.pi-comments-loading, .pi-no-comments { font-size: 13px; color: var(--text-dim); text-align: center; padding: 8px 0; }
+.pi-comment { display: flex; gap: 10px; }
+.pi-comment-avatar {
+  width: 30px; height: 30px; flex-shrink: 0; background: var(--bg-hover);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--text-muted);
+}
+.pi-comment-body   { flex: 1; min-width: 0; }
+.pi-comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.pi-comment-author { font-size: 13px; font-weight: 700; }
+.pi-comment-time   { font-size: 11px; color: var(--text-dim); }
+.pi-comment-delete {
+  margin-left: auto; font-size: 11px; color: var(--text-dim);
+  padding: 1px 5px; border-radius: 4px; transition: color 0.15s, background 0.15s;
+}
+.pi-comment-delete:hover { color: var(--red); background: rgba(248,81,73,0.1); }
+.pi-comment-text { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.pi-comment-form  { margin-top: 4px; }
+.pi-comment-input-row { display: flex; align-items: center; gap: 8px; }
+.pi-comment-self-avatar {
+  width: 30px; height: 30px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #000;
+}
+.pi-comment-input {
+  flex: 1; background: var(--bg-primary); border: 1px solid var(--border);
+  border-radius: 20px; padding: 7px 14px; font-size: 13px; color: var(--text-primary);
+  outline: none; transition: border-color 0.15s;
+}
+.pi-comment-input::placeholder { color: var(--text-dim); }
+.pi-comment-input:focus        { border-color: var(--accent); }
+.pi-comment-submit {
+  font-size: 13px; font-weight: 700; background: var(--accent); color: #000;
+  padding: 7px 14px; border-radius: 20px; white-space: nowrap;
+  transition: background 0.15s, opacity 0.15s;
+}
+.pi-comment-submit:disabled            { opacity: 0.4; cursor: not-allowed; }
+.pi-comment-submit:not(:disabled):hover{ background: var(--accent-dim); }
+
+@media (max-width: 768px) {
+  .post-item { padding: 14px; border-radius: 10px; }
+  .pi-bar-btn { padding: 5px 8px; font-size: 13px; }
+}

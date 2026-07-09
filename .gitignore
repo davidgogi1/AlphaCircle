@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contain secrets — never commit)
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+
+# Uploaded files (user content, not source code)
+Backend/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# TypeScript cache
+*.tsbuildinfo

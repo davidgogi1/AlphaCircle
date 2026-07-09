@@ -1,0 +1,86 @@
+.sb-wrap {
+  position: relative;
+  width: 480px;
+  flex-shrink: 1;
+}
+
+/* The actual input inherits existing .search-input styles from Layout.css */
+.sb-wrap .search-input { width: 100%; }
+
+/* ── Dropdown ─────────────────────────────────────────────────────────────── */
+.sb-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0; right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 200;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sb-empty {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.sb-section { display: flex; flex-direction: column; }
+
+.sb-section + .sb-section {
+  border-top: 1px solid var(--border);
+}
+
+.sb-section-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.8px; text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 10px 14px 4px;
+}
+
+.sb-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  text-align: left;
+  transition: background 0.12s;
+  width: 100%;
+}
+.sb-item:hover { background: var(--bg-hover); }
+
+.sb-item-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+}
+
+.sb-item-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.sb-item-main {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sb-item-sub {
+  font-size: 11px; color: var(--text-dim);
+}
+
+.sb-see-all {
+  width: 100%;
+  padding: 11px 14px;
+  text-align: center;
+  font-size: 13px; font-weight: 600;
+  color: var(--accent);
+  border-top: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.sb-see-all:hover { background: rgba(0,201,177,0.07); }
+
+@media (max-width: 768px) {
+  .sb-wrap { display: none; }
+}
