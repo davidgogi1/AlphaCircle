@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { useAuth } from '../contexts/AuthContext';
 import PostItem, { type Post } from '../components/feed/PostItem';
 import UserAvatar from '../components/UserAvatar';
 import './UserProfilePage.css';
@@ -25,7 +24,6 @@ interface ProfileUser {
 export default function UserProfilePage() {
   const { userId }  = useParams<{ userId: string }>();
   const navigate    = useNavigate();
-  const { user: me } = useAuth();
 
   const [profile,    setProfile]    = useState<ProfileUser | null>(null);
   const [posts,      setPosts]      = useState<Post[]>([]);

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { REACTIONS, EMOJI } from './reactions';
+import { REACTIONS } from './reactions';
 import './ReactionPicker.css';
 
 interface Props {

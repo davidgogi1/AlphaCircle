@@ -13,7 +13,7 @@ interface Stock {
 const SECTORS = ['All', 'Technology', 'Finance', 'Healthcare', 'Energy', 'Consumer', 'Industrials', 'ETFs', 'Crypto'];
 
 export default function StockPickerPage() {
-  const { token, finishOnboarding } = useAuth();
+  const { token, finishProfile } = useAuth();
   const [stocks, setStocks]         = useState<Stock[]>([]);
   const [selected, setSelected]     = useState<Set<string>>(new Set());
   const [sector, setSector]         = useState('All');
@@ -49,7 +49,7 @@ export default function StockPickerPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.message || 'Something went wrong'); return; }
-      finishOnboarding(data.user);
+      finishProfile(data.user);
     } catch {
       setError('Network error, please try again.');
     } finally {

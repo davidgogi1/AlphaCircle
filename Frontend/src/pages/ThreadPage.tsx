@@ -58,7 +58,7 @@ function allDescendantIds(flat: FlatComment[], parentId: string): string[] {
 }
 
 export default function ThreadPage() {
-  const { slug, threadId } = useParams<{ slug: string; threadId: string }>();
+  const { threadId } = useParams<{ slug: string; threadId: string }>();
   const { user } = useAuth();
   const { savedThreadIds, toggleThread } = useSaved();
   const navigate = useNavigate();
@@ -188,7 +188,7 @@ export default function ThreadPage() {
   const handleDelete = async () => {
     try {
       await api.delete(`/discussions/threads/${threadId}`);
-      navigate(`/discussions/${thread.topic?.slug ?? ''}`);
+      navigate(`/discussions/${thread?.topic?.slug ?? ''}`);
     } catch { setEditError('Failed to delete'); setMode('view'); }
   };
 

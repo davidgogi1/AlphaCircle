@@ -2,7 +2,7 @@ import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export interface IPoll extends Document {
   question: string;
-  options:  { text: string; voters: Types.ObjectId[] }[];
+  options:  { _id: Types.ObjectId; text: string; voters: Types.ObjectId[] }[];
   creator:  Types.ObjectId;
   createdAt: Date;
 }

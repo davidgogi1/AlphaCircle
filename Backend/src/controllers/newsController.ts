@@ -40,7 +40,7 @@ export const getNews = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const articles: Article[] = await response.json();
+    const articles = (await response.json()) as Article[];
     // Filter out articles with no headline or URL
     const filtered = articles.filter(a => a.headline && a.url && a.source === 'CNBC');
 

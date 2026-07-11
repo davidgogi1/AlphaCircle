@@ -47,7 +47,7 @@ function timeLabel(date: string) {
 
 export default function ChatGroupsPage() {
   const { user }                             = useAuth();
-  const { refresh, setPendingCount, unreadCounts, markRead, socket, transferOfferCount } = useGroupNotifications();
+  const { refresh, setPendingCount, unreadCounts, markRead, socket } = useGroupNotifications();
 
   const [accepted,          setAccepted]          = useState<Group[]>([]);
   const [pending,           setPending]           = useState<Group[]>([]);
