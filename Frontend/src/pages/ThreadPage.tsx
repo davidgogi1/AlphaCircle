@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSaved } from '../contexts/SavedContext';
-import { api } from '../api';
+import { api, apiUpload } from '../api';
 import ReactionPicker from '../components/feed/ReactionPicker';
 import ReactionsModal from '../components/feed/ReactionsModal';
 import CommentThread, { type CommentNode } from '../components/feed/CommentThread';
@@ -27,6 +27,7 @@ interface FlatComment {
   author: { _id: string; username: string };
   createdAt: string; parent: string | null;
   reactions?: { user: string; type: string }[];
+  attachment?: { filename: string; originalName: string; mimetype: string; size: number };
 }
 
 function timeAgo(date: string): string {
@@ -83,7 +84,9 @@ export default function ThreadPage() {
   const [flatComments,    setFlatComments]    = useState<FlatComment[]>([]);
   const [commentCount,    setCommentCount]    = useState(0);
   const [rootInput,       setRootInput]       = useState('');
+  const [rootFile,        setRootFile]        = useState<File | null>(null);
   const [submittingRoot,  setSubmittingRoot]  = useState(false);
+  const rootFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!threadId) return;
@@ -126,18 +129,54 @@ export default function ThreadPage() {
   // ── Comments ───────────────────────────────────────────────────────────
   const handleRootComment = async (e: FormEvent) => {
     e.preventDefault();
-    if (!rootInput.trim() || submittingRoot) return;
+    if ((!rootInput.trim() && !rootFile) || submittingRoot) return;
     setSubmittingRoot(true);
+    const text = rootInput.trim();
+    const file = rootFile;
     try {
-      const data = await api.post(`/discussions/threads/${threadId}/comments`, { content: rootInput.trim() });
+      let data;
+      if (file) {
+        const fd = new FormData();
+        fd.append('file', file);
+        if (text) fd.append('content', text);
+        data = await apiUpload('POST', `/discussions/threads/${threadId}/comments`, fd);
+      } else {
+        data = await api.post(`/discussions/threads/${threadId}/comments`, { content: text });
+      }
       setFlatComments(prev => [...prev, data.comment]);
       setCommentCount(c => c + 1);
       setRootInput('');
+      setRootFile(null);
+      if (rootFileInputRef.current) rootFileInputRef.current.value = '';
     } finally { setSubmittingRoot(false); }
   };
 
-  const handleReply = async (parentId: string, content: string) => {
-    const data = await api.post(`/discussions/threads/${threadId}/comments`, { content, parentId });
+  const handleRootPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          setRootFile(file);
+        }
+        break;
+      }
+    }
+  };
+
+  const handleReply = async (parentId: string, content: string, file?: File) => {
+    let data;
+    if (file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('parentId', parentId);
+      if (content) fd.append('content', content);
+      data = await apiUpload('POST', `/discussions/threads/${threadId}/comments`, fd);
+    } else {
+      data = await api.post(`/discussions/threads/${threadId}/comments`, { content, parentId });
+    }
     setFlatComments(prev => [...prev, data.comment]);
     setCommentCount(c => c + 1);
   };
@@ -307,15 +346,32 @@ export default function ThreadPage() {
               {user?.username.slice(0, 2).toUpperCase()}
             </div>
             <input
-              className="thp-comment-input"
-              placeholder="Write a comment…"
-              value={rootInput}
-              onChange={e => setRootInput(e.target.value)}
-              maxLength={500}
-              autoFocus
+              ref={rootFileInputRef}
+              type="file"
+              className="thp-comment-file-input"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+              onChange={e => setRootFile(e.target.files?.[0] ?? null)}
             />
+            <button type="button" className="thp-comment-attach-btn" onClick={() => rootFileInputRef.current?.click()} title="Attach file">📎</button>
+            <div className="thp-comment-input-wrap">
+              {rootFile && (
+                <div className="thp-comment-file-preview">
+                  <span className="thp-comment-file-preview-name">{rootFile.name}</span>
+                  <button type="button" className="thp-comment-file-preview-remove" onClick={() => { setRootFile(null); if (rootFileInputRef.current) rootFileInputRef.current.value = ''; }}>✕</button>
+                </div>
+              )}
+              <input
+                className="thp-comment-input"
+                placeholder={rootFile ? 'Add a caption… (optional)' : 'Write a comment… (paste a screenshot to attach it)'}
+                value={rootInput}
+                onChange={e => setRootInput(e.target.value)}
+                onPaste={handleRootPaste}
+                maxLength={500}
+                autoFocus
+              />
+            </div>
             <button className="thp-comment-submit" type="submit"
-              disabled={submittingRoot || !rootInput.trim()}>
+              disabled={submittingRoot || (!rootInput.trim() && !rootFile)}>
               {submittingRoot ? '…' : 'Post'}
             </button>
           </div>

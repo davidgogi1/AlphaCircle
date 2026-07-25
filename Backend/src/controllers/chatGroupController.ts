@@ -183,6 +183,7 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
 
     const messages = await ChatGroupMessage.find({ group: req.params.id })
       .populate('sender', 'username')
+      .populate({ path: 'replyTo', select: 'content sender', populate: { path: 'sender', select: 'username' } })
       .sort({ createdAt: 1 })
       .lean();
 
@@ -197,6 +198,7 @@ export const sendGroupMessage = async (req: Request, res: Response): Promise<voi
   try {
     const content = (req.body.content ?? '').trim();
     const file    = req.file;
+    const replyTo = req.body.replyTo;
     if (!content && !file) { res.status(400).json({ message: 'Content or file required' }); return; }
 
     const group = await ChatGroup.findById(req.params.id).lean();
@@ -206,6 +208,11 @@ export const sendGroupMessage = async (req: Request, res: Response): Promise<voi
       m => m.user.toString() === req.userId && m.status === 'accepted',
     );
     if (!isMember) { res.status(403).json({ message: 'Not a member' }); return; }
+
+    if (replyTo) {
+      const parent = await ChatGroupMessage.findOne({ _id: replyTo, group: req.params.id });
+      if (!parent) { res.status(400).json({ message: 'Invalid reply target' }); return; }
+    }
 
     const attachment = file ? {
       filename:     file.filename,
@@ -218,9 +225,11 @@ export const sendGroupMessage = async (req: Request, res: Response): Promise<voi
       group:   req.params.id,
       sender:  req.userId,
       content,
+      replyTo: replyTo || null,
       ...(attachment ? { attachment } : {}),
     });
     await msg.populate('sender', 'username');
+    await msg.populate({ path: 'replyTo', select: 'content sender', populate: { path: 'sender', select: 'username' } });
 
     // Sender has "read" up to now
     await GroupRead.findOneAndUpdate(
@@ -232,6 +241,45 @@ export const sendGroupMessage = async (req: Request, res: Response): Promise<voi
     getIO()?.to(`group:${req.params.id}`).emit('group_message', { ...msg.toObject(), group: req.params.id });
 
     res.status(201).json({ message: msg });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// POST /api/groups/:id/messages/:messageId/react
+export const reactToGroupMessage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { type } = req.body;
+    const allowed  = ['like','love','haha','wow','sad','angry'];
+    if (!allowed.includes(type)) { res.status(400).json({ message: 'Invalid reaction' }); return; }
+
+    const group = await ChatGroup.findById(req.params.id).lean();
+    if (!group) { res.status(404).json({ message: 'Not found' }); return; }
+
+    const isMember = group.members.some(
+      m => m.user.toString() === req.userId && m.status === 'accepted',
+    );
+    if (!isMember) { res.status(403).json({ message: 'Not a member' }); return; }
+
+    const msg = await ChatGroupMessage.findOne({ _id: req.params.messageId, group: req.params.id });
+    if (!msg) { res.status(404).json({ message: 'Message not found' }); return; }
+
+    const userId     = new mongoose.Types.ObjectId(req.userId);
+    const existing   = msg.reactions.find(r => r.user.equals(userId));
+    const isSameType = existing?.type === type;
+
+    await ChatGroupMessage.updateOne({ _id: msg._id }, { $pull: { reactions: { user: userId } } });
+    if (!isSameType) {
+      await ChatGroupMessage.updateOne({ _id: msg._id }, { $push: { reactions: { user: userId, type } } });
+    }
+
+    const updated = await ChatGroupMessage.findById(msg._id).lean();
+
+    getIO()?.to(`group:${req.params.id}`).emit('group_message_reaction', {
+      messageId: msg._id, group: req.params.id, reactions: updated!.reactions,
+    });
+
+    res.json({ reactions: updated!.reactions, userReaction: isSameType ? null : type });
   } catch {
     res.status(500).json({ message: 'Server error' });
   }

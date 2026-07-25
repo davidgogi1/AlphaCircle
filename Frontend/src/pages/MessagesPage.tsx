@@ -1,9 +1,30 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { io, type Socket } from "socket.io-client";
+import { useEffect, useRef, useState, type FormEvent, type ClipboardEvent } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useMessageNotifications } from "../contexts/MessageNotificationsContext";
 import { api, apiUpload } from "../api";
+import ReactionPicker from "../components/feed/ReactionPicker";
+import { EMOJI } from "../components/feed/reactions";
+import { extractConsensusLinkId } from "../utils/consensusLink";
 import "./MessagesPage.css";
+
+function MessageContent({ content }: { content: string }) {
+  return (
+    <>
+      {content.split("\n").map((line, i) => {
+        const consensusId = extractConsensusLinkId(line);
+        if (consensusId) {
+          return (
+            <Link key={i} to={`/consensus/${consensusId}`} className="mp-consensus-link">
+              📊 Open Consensus Poll →
+            </Link>
+          );
+        }
+        return <span key={i} className="mp-bubble-line">{line}</span>;
+      })}
+    </>
+  );
+}
 
 interface OtherUser {
   _id: string;
@@ -21,12 +42,16 @@ interface Conversation {
 }
 
 interface Attachment { filename: string; originalname: string; mimetype: string; size: number; }
+interface Reaction { user: string; type: string; }
+interface ReplyPreview { _id: string; content: string; sender: { _id: string; username: string }; }
 interface Message {
   _id: string;
   sender: { _id: string; username: string };
   recipient: { _id: string; username: string };
   content: string;
   attachment?: Attachment;
+  reactions: Reaction[];
+  replyTo?: ReplyPreview | null;
   createdAt: string;
 }
 
@@ -72,6 +97,7 @@ export default function MessagesPage() {
   console.log(activeUserId);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { socket, markRead } = useMessageNotifications();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -81,9 +107,9 @@ export default function MessagesPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isDragging,  setIsDragging]  = useState(false);
+  const [replyingTo,  setReplyingTo]  = useState<Message | null>(null);
 
   const bottomRef      = useRef<HTMLDivElement>(null);
-  const socketRef      = useRef<Socket | null>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const activeUserIdRef = useRef(activeUserId);
@@ -101,36 +127,47 @@ export default function MessagesPage() {
 
   useEffect(() => {
     loadConversations();
+  }, []);
 
-    // Connect socket
-    const token = localStorage.getItem("token");
-    const socket = io({ auth: { token } });
-    socketRef.current = socket;
+  // Attach listeners to the shared notifications socket
+  useEffect(() => {
+    if (!socket) return;
 
-    socket.on("new_message", (msg: Message) => {
+    const onMessage = (msg: Message) => {
       const myId = user?.id;
       const otherId =
         msg.sender._id === myId ? msg.recipient._id : msg.sender._id;
 
-      // If the message belongs to the active conversation, add it
+      // If the message belongs to the active conversation, add it and mark it
+      // read immediately — the user is actively watching this conversation.
       if (
         otherId === activeUserIdRef.current ||
         msg.sender._id === activeUserIdRef.current
       ) {
         setMessages((prev) => [...prev, msg]);
+        markRead(otherId);
       }
 
       // Refresh conversation list
       loadConversations();
-    });
+    };
+
+    const onReaction = ({ messageId, reactions }: { messageId: string; reactions: Reaction[] }) => {
+      setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, reactions } : m)));
+    };
+
+    socket.on("new_message", onMessage);
+    socket.on("message_reaction", onReaction);
 
     return () => {
-      socket.disconnect();
+      socket.off("new_message", onMessage);
+      socket.off("message_reaction", onReaction);
     };
-  }, []);
+  }, [socket, user?.id, markRead]);
 
   // Load messages when active user changes
   useEffect(() => {
+    setReplyingTo(null);
     if (!activeUserId) {
       setMessages([]);
       setOtherUser(null);
@@ -142,14 +179,35 @@ export default function MessagesPage() {
       .then((d) => {
         setMessages(d.messages);
         setOtherUser(d.otherUser);
+        // The server just marked these as read — reflect that immediately
+        // instead of waiting for a remount to notice.
+        markRead(activeUserId);
+        setConversations((prev) => prev.map((c) =>
+          c.otherUser._id === activeUserId ? { ...c, unreadCount: 0 } : c
+        ));
       })
       .finally(() => setLoadingMsgs(false));
-  }, [activeUserId]);
+  }, [activeUserId, markRead]);
 
   // Scroll to bottom when messages load/arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          setPendingFile(file);
+        }
+        break;
+      }
+    }
+  };
 
   const handleSend = async (e: FormEvent) => {
     e.preventDefault();
@@ -157,8 +215,10 @@ export default function MessagesPage() {
     setSending(true);
     const text = input.trim();
     const file = pendingFile;
+    const replyToId = replyingTo?._id;
     setInput("");
     setPendingFile(null);
+    setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     try {
       let data;
@@ -166,15 +226,28 @@ export default function MessagesPage() {
         const fd = new FormData();
         fd.append("file", file);
         if (text) fd.append("content", text);
+        if (replyToId) fd.append("replyTo", replyToId);
         data = await apiUpload("POST", `/messages/${activeUserId}`, fd);
       } else {
-        data = await api.post(`/messages/${activeUserId}`, { content: text });
+        data = await api.post(`/messages/${activeUserId}`, { content: text, replyTo: replyToId });
       }
       setMessages((prev) => [...prev, data.message]);
       loadConversations();
     } finally {
       setSending(false);
     }
+  };
+
+  const handleReact = async (messageId: string, type: string) => {
+    const msg = messages.find((m) => m._id === messageId);
+    const isSame = (msg?.reactions ?? []).find((r) => r.user === user?.id)?.type === type;
+    setMessages((prev) => prev.map((m) => {
+      if (m._id !== messageId) return m;
+      const withoutMine = (m.reactions ?? []).filter((r) => r.user !== user?.id);
+      return { ...m, reactions: isSame ? withoutMine : [...withoutMine, { user: user!.id, type }] };
+    }));
+    const data = await api.post(`/messages/msg/${messageId}/react`, { type });
+    setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, reactions: data.reactions } : m)));
   };
 
   return (
@@ -276,6 +349,11 @@ export default function MessagesPage() {
 
               {messages.map((m) => {
                 const mine = m.sender._id === user?.id;
+                const userReaction = (m.reactions ?? []).find((r) => r.user === user?.id)?.type ?? null;
+                const reactionCounts = (m.reactions ?? []).reduce<Record<string, number>>((acc, r) => {
+                  acc[r.type] = (acc[r.type] ?? 0) + 1;
+                  return acc;
+                }, {});
                 return (
                   <div
                     key={m._id}
@@ -288,12 +366,41 @@ export default function MessagesPage() {
                     )}
                     <div className="mp-bubble-wrap">
                       <div className={`mp-bubble ${mine ? "mine" : "theirs"}`}>
+                        {m.replyTo && (
+                          <div className="mp-bubble-quote">
+                            <span className="mp-bubble-quote-sender">{m.replyTo.sender.username}</span>
+                            <span className="mp-bubble-quote-text">{m.replyTo.content || "📎 Attachment"}</span>
+                          </div>
+                        )}
                         {m.attachment && <AttachmentView attachment={m.attachment} mine={mine} />}
-                        {m.content && <span>{m.content}</span>}
+                        {m.content && <MessageContent content={m.content} />}
                       </div>
-                      <span className="mp-bubble-time">
-                        {timeLabel(m.createdAt)}
-                      </span>
+                      {Object.keys(reactionCounts).length > 0 && (
+                        <div className="mp-bubble-reactions">
+                          {Object.entries(reactionCounts).map(([type, count]) => (
+                            <span key={type} className="mp-bubble-reaction-chip">{EMOJI[type]} {count}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mp-bubble-footer">
+                        <span className="mp-bubble-time">
+                          {timeLabel(m.createdAt)}
+                        </span>
+                        <div className="mp-bubble-actions">
+                          <ReactionPicker
+                            userReaction={userReaction}
+                            onReact={(type) => handleReact(m._id, type)}
+                            compact
+                          />
+                          <button
+                            type="button"
+                            className="mp-reply-btn"
+                            onClick={() => setReplyingTo(m)}
+                          >
+                            ↩ Reply
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -302,6 +409,15 @@ export default function MessagesPage() {
             </div>
 
             {/* Input */}
+            {replyingTo && (
+              <div className="mp-reply-preview">
+                <div className="mp-reply-preview-info">
+                  <span className="mp-reply-preview-label">Replying to {replyingTo.sender._id === user?.id ? "yourself" : replyingTo.sender.username}</span>
+                  <span className="mp-reply-preview-text">{replyingTo.content || "📎 Attachment"}</span>
+                </div>
+                <button type="button" className="mp-reply-preview-cancel" onClick={() => setReplyingTo(null)}>✕</button>
+              </div>
+            )}
             <form className="mp-input-bar" onSubmit={handleSend}>
               <input
                 ref={fileInputRef}
@@ -320,9 +436,10 @@ export default function MessagesPage() {
                 )}
                 <input
                   className="mp-input"
-                  placeholder={pendingFile ? "Add a caption… (optional)" : "Write a message…"}
+                  placeholder={pendingFile ? "Add a caption… (optional)" : "Write a message… (paste a screenshot to attach it)"}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
+                  onPaste={handlePaste}
                   maxLength={2000}
                   autoFocus
                 />

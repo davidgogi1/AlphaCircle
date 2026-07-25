@@ -30,6 +30,13 @@ export default function Layout() {
               </div>
               <span className="topbar-username">{user?.username}</span>
               <button
+                className="topbar-settings"
+                onClick={() => navigate("/settings")}
+                title="Settings"
+              >
+                ⚙
+              </button>
+              <button
                 className="topbar-logout"
                 onClick={logout}
                 title="Log out"

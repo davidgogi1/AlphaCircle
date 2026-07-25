@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import PostItem, { type Post } from '../components/feed/PostItem';
 import UserAvatar from '../components/UserAvatar';
@@ -24,6 +24,8 @@ interface ProfileUser {
 export default function UserProfilePage() {
   const { userId }  = useParams<{ userId: string }>();
   const navigate    = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightPost = searchParams.get('highlightPost');
 
   const [profile,    setProfile]    = useState<ProfileUser | null>(null);
   const [posts,      setPosts]      = useState<Post[]>([]);
@@ -44,6 +46,13 @@ export default function UserProfilePage() {
       .catch(() => setError('Could not load profile.'))
       .finally(() => setLoading(false));
   }, [userId]);
+
+  useEffect(() => {
+    if (!highlightPost || loading) return;
+    const el = document.getElementById(`post-${highlightPost}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightPost, loading, posts]);
 
   const handleFollow = async () => {
     if (followPend) return;
@@ -116,12 +125,13 @@ export default function UserProfilePage() {
 
       <div className="up-posts">
         {posts.map(p => (
-          <PostItem
-            key={p._id}
-            post={p}
-            onUpdate={updated => setPosts(prev => prev.map(x => x._id === updated._id ? updated : x))}
-            onDelete={id => setPosts(prev => prev.filter(x => x._id !== id))}
-          />
+          <div key={p._id} id={`post-${p._id}`} className={p._id === highlightPost ? 'up-post-highlight' : ''}>
+            <PostItem
+              post={p}
+              onUpdate={updated => setPosts(prev => prev.map(x => x._id === updated._id ? updated : x))}
+              onDelete={id => setPosts(prev => prev.filter(x => x._id !== id))}
+            />
+          </div>
         ))}
       </div>
     </div>

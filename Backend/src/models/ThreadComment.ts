@@ -5,13 +5,21 @@ export interface IThreadCommentReaction {
   type: string;
 }
 
+export interface IThreadCommentAttachment {
+  filename:     string;
+  originalName: string;
+  mimetype:     string;
+  size:         number;
+}
+
 export interface IThreadComment extends Document {
-  thread:    Types.ObjectId;
-  author:    Types.ObjectId;
-  content:   string;
-  parent:    Types.ObjectId | null;
-  reactions: Types.DocumentArray<IThreadCommentReaction & { _id: Types.ObjectId }>;
-  createdAt: Date;
+  thread:      Types.ObjectId;
+  author:      Types.ObjectId;
+  content:     string;
+  parent:      Types.ObjectId | null;
+  reactions:   Types.DocumentArray<IThreadCommentReaction & { _id: Types.ObjectId }>;
+  attachment?: IThreadCommentAttachment;
+  createdAt:   Date;
 }
 
 const ReactionSchema = new Schema<IThreadCommentReaction>(
@@ -20,13 +28,21 @@ const ReactionSchema = new Schema<IThreadCommentReaction>(
   { _id: false }
 );
 
+const AttachmentSchema = new Schema<IThreadCommentAttachment>({
+  filename:     { type: String, required: true },
+  originalName: { type: String, required: true },
+  mimetype:     { type: String, required: true },
+  size:         { type: Number, required: true },
+}, { _id: false });
+
 const ThreadCommentSchema = new Schema<IThreadComment>({
-  thread:    { type: Schema.Types.ObjectId, ref: 'Thread',        required: true },
-  author:    { type: Schema.Types.ObjectId, ref: 'User',          required: true },
-  content:   { type: String, required: true, trim: true, maxlength: 500 },
-  parent:    { type: Schema.Types.ObjectId, ref: 'ThreadComment', default: null },
-  reactions: { type: [ReactionSchema], default: [] },
-  createdAt: { type: Date, default: Date.now },
+  thread:     { type: Schema.Types.ObjectId, ref: 'Thread',        required: true },
+  author:     { type: Schema.Types.ObjectId, ref: 'User',          required: true },
+  content:    { type: String, trim: true, maxlength: 500, default: '' },
+  parent:     { type: Schema.Types.ObjectId, ref: 'ThreadComment', default: null },
+  reactions:  { type: [ReactionSchema], default: [] },
+  attachment: { type: AttachmentSchema, default: null },
+  createdAt:  { type: Date, default: Date.now },
 });
 
 ThreadCommentSchema.index({ thread: 1, createdAt: 1 });

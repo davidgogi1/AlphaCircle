@@ -3,6 +3,13 @@ import mongoose from 'mongoose';
 import Topic   from '../models/Topic';
 import Thread  from '../models/Thread';
 import ThreadComment from '../models/ThreadComment';
+import { embedText } from '../services/embeddingService';
+
+function embedThreadAsync(threadId: string, title: string, content: string): void {
+  embedText(`${title}\n${content}`)
+    .then(embedding => Thread.updateOne({ _id: threadId }, { embedding }))
+    .catch(err => console.error('Thread embedding failed:', err.message));
+}
 
 // ── Trending ───────────────────────────────────────────────────────────────
 
@@ -153,6 +160,7 @@ export const createThread = async (req: Request, res: Response): Promise<void> =
     await thread.populate('tags',   'name slug icon type');
 
     res.status(201).json({ thread });
+    embedThreadAsync(thread.id, thread.title, thread.content);
   } catch {
     res.status(500).json({ message: 'Server error' });
   }
@@ -185,6 +193,7 @@ export const updateThread = async (req: Request, res: Response): Promise<void> =
     await thread.save();
     await thread.populate('author', 'username bio avatar');
     res.json({ thread });
+    embedThreadAsync(thread.id, thread.title, thread.content);
   } catch {
     res.status(500).json({ message: 'Server error' });
   }
@@ -262,7 +271,7 @@ export const getThreadComments = async (req: Request, res: Response): Promise<vo
 export const addThreadComment = async (req: Request, res: Response): Promise<void> => {
   try {
     const { content, parentId } = req.body;
-    if (!content?.trim()) { res.status(400).json({ message: 'Content is required' }); return; }
+    if (!content?.trim() && !req.file) { res.status(400).json({ message: 'Content is required' }); return; }
 
     const thread = await Thread.findById(req.params.threadId);
     if (!thread) { res.status(404).json({ message: 'Thread not found' }); return; }
@@ -272,11 +281,16 @@ export const addThreadComment = async (req: Request, res: Response): Promise<voi
       if (!parent) { res.status(400).json({ message: 'Invalid parent comment' }); return; }
     }
 
+    const attachment = req.file
+      ? { filename: req.file.filename, originalName: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size }
+      : undefined;
+
     const comment = await ThreadComment.create({
       thread:  thread._id,
       author:  req.userId,
-      content: content.trim(),
+      content: content?.trim() ?? '',
       parent:  parentId ? new mongoose.Types.ObjectId(parentId) : null,
+      attachment,
     });
     await comment.populate('author', 'username bio avatar');
 

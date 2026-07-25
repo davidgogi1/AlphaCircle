@@ -2,6 +2,14 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import Post from "../models/Post";
 import User from "../models/User";
+import { embedText } from "../services/embeddingService";
+import { extractHashtags } from "../utils/hashtags";
+
+function embedPostAsync(postId: string, title: string, content: string): void {
+  embedText(`${title}\n${content}`)
+    .then(embedding => Post.updateOne({ _id: postId }, { embedding }))
+    .catch(err => console.error("Post embedding failed:", err.message));
+}
 
 const signToken = (id: string) =>
   jwt.sign({ id }, process.env.JWT_SECRET!, { expiresIn: "7d" });
@@ -19,9 +27,11 @@ export const createPost = async (
     const attachment = req.file
       ? { filename: req.file.filename, originalName: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size }
       : undefined;
-    const post = await Post.create({ title, content, author: req.userId, attachment });
+    const hashtags = extractHashtags(content);
+    const post = await Post.create({ title, content, author: req.userId, attachment, hashtags });
     await post.populate("author", "username avatar");
     res.status(201).json({ post });
+    embedPostAsync(post.id, post.title ?? "", post.content);
   } catch {
     res.status(500).json({ message: "Server error" });
   }
@@ -84,8 +94,9 @@ export const updatePost = async (
       res.status(400).json({ message: "Content is required" });
       return;
     }
-    post.title   = title?.trim() || "";
-    post.content = content.trim();
+    post.title    = title?.trim() || "";
+    post.content  = content.trim();
+    post.hashtags = extractHashtags(post.content);
 
     if (req.file) {
       post.attachment = { filename: req.file.filename, originalName: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size };
@@ -96,6 +107,7 @@ export const updatePost = async (
     await post.save();
     await post.populate("author", "username avatar");
     res.json({ post });
+    embedPostAsync(post.id, post.title ?? "", post.content);
   } catch {
     res.status(500).json({ message: "Server error" });
   }
@@ -118,6 +130,39 @@ export const getTrendingPosts = async (_req: Request, res: Response): Promise<vo
     res.json({ posts: scored.slice(0, 8) });
   } catch {
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getPostsByHashtag = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const tag = req.params.tag.toLowerCase();
+
+    const tagged = await Post.find({ hashtags: tag })
+      .populate("author", "username avatar")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Word-boundary match on the plain word, for posts that mention it
+    // without using the #tag — excludes anything already returned above.
+    const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const mentionRegex = new RegExp(`\\b${escaped}\\b`, "i");
+    const mentioned = await Post.find({
+      _id: { $nin: tagged.map((p) => p._id) },
+      content: mentionRegex,
+    })
+      .populate("author", "username avatar")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      tagged,
+      mentioned,
+    });
+  } catch {
+    res.status(500).json({ message: "Server error" });
   }
 };
 

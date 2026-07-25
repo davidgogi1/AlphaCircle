@@ -1,11 +1,28 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)",
-      "Bash(npx tsx *)",
-      "Bash(curl -s http://localhost:5000/api/posts/trending -H \"Authorization: Bearer test\")",
-      "Bash(kill %1)",
-      "Bash(npx tsx -e ' *)"
+      "Bash"
+    ],
+    "ask": [
+      "Bash(rm -rf *)",
+      "Bash(sudo rm -rf *)",
+      "Bash(rm -rf /*)",
+      "Bash(git reset --hard*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin --force*)",
+      "Bash(git clean -fd*)",
+      "Bash(git branch -D*)",
+      "Bash(mongosh*drop*)",
+      "Bash(mongorestore*--drop*)",
+      "Bash(*dropDatabase*)",
+      "Bash(*dropCollection*)",
+      "Bash(*deleteMany({})*)",
+      "Bash(pm2 delete*)",
+      "Bash(systemctl stop mongod*)",
+      "Bash(yum remove*)",
+      "Bash(mkfs*)",
+      "Bash(dd if=*of=/dev/*)"
     ]
   }
 }

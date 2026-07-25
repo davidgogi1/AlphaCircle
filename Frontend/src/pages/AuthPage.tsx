@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import './AuthPage.css';
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'forgot';
 
 interface InviteState {
   status: 'idle' | 'checking' | 'valid' | 'invalid';
@@ -11,11 +11,13 @@ interface InviteState {
 }
 
 export default function AuthPage() {
-  const { login, register } = useAuth();
+  const { login, verifyLogin, register, forgotPassword, resetPassword } = useAuth();
 
-  // Read invite token from URL (AuthPage renders outside BrowserRouter)
-  const params      = new URLSearchParams(window.location.search);
-  const tokenInUrl  = params.get('invite') ?? '';
+  // AuthPage renders outside BrowserRouter, so URL params are read directly.
+  const params       = new URLSearchParams(window.location.search);
+  const tokenInUrl   = params.get('invite') ?? '';
+  const resetToken   = params.get('reset') ?? '';
+  const dismissAlert = params.get('dismissAlert') === '1';
 
   const [mode, setMode]         = useState<Mode>(tokenInUrl ? 'register' : 'login');
   const [username, setUsername] = useState('');
@@ -25,13 +27,31 @@ export default function AuthPage() {
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
 
+  const [pendingLoginId, setPendingLoginId] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+
+  const [forgotSent, setForgotSent] = useState('');
+
+  const [resetPass, setResetPass]     = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetConfirmingSame, setResetConfirmingSame] = useState(false);
+  const [resetDone, setResetDone]     = useState(false);
+
   const [invite, setInvite] = useState<InviteState>({
     status: tokenInUrl ? 'checking' : 'idle',
     email:  '',
     token:  tokenInUrl,
   });
 
-  // Validate the token if present in URL
+  // After a successful reset, land back on a clean login screen — auto-redirect
+  // shortly after, but don't strand anyone waiting on it either.
+  useEffect(() => {
+    if (!resetDone) return;
+    const t = setTimeout(() => { window.location.href = '/'; }, 2500);
+    return () => clearTimeout(t);
+  }, [resetDone]);
+
+  // Validate the invite token if present in URL
   useEffect(() => {
     if (!tokenInUrl) return;
     fetch(`/api/invites/validate/${tokenInUrl}`)
@@ -62,12 +82,65 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (mode === 'login') {
-        await login(email, password);
+        const result = await login(email, password);
+        if (result.verificationRequired && result.pendingLoginId) {
+          setPendingLoginId(result.pendingLoginId);
+        }
       } else {
         await register(username, email, password, invite.token);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!pendingLoginId || !code.trim()) return;
+    setError('');
+    setLoading(true);
+    try {
+      await verifyLogin(pendingLoginId, code.trim());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const message = await forgotPassword(email);
+      setForgotSent(message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetSubmit = async (e: FormEvent, confirmSame = false) => {
+    e.preventDefault();
+    setError('');
+    if (!confirmSame && resetPass !== resetConfirm) { setError('Passwords do not match.'); return; }
+    if (resetPass.length < 6) { setError('Password must be at least 6 characters.'); return; }
+
+    setLoading(true);
+    try {
+      const result = await resetPassword(resetToken, resetPass, confirmSame);
+      if (result.sameAsCurrentPassword) {
+        setResetConfirmingSame(true);
+      } else {
+        setResetDone(true);
+        setResetConfirmingSame(false);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password');
     } finally {
       setLoading(false);
     }
@@ -177,6 +250,110 @@ export default function AuthPage() {
     );
   };
 
+  // ── Priority screens (email-link driven), before the normal login/register tabs ──
+
+  if (dismissAlert) {
+    return (
+      <div className="auth-bg">
+        <div className="auth-card">
+          <div className="auth-logo">
+            <span className="auth-logo-icon">📊</span>
+            <div>
+              <div className="auth-logo-name">AlphaCircle</div>
+              <div className="auth-logo-sub">INVESTOR NETWORK</div>
+            </div>
+          </div>
+          <div className="auth-invite-status valid">
+            <span className="auth-invite-icon">✅</span>
+            <div>
+              <div className="auth-invite-title">Thanks for confirming</div>
+              <div className="auth-invite-sub">No action needed — your account is unaffected. You can close this page.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (resetToken) {
+    return (
+      <div className="auth-bg">
+        <div className="auth-card">
+          <div className="auth-logo">
+            <span className="auth-logo-icon">📊</span>
+            <div>
+              <div className="auth-logo-name">AlphaCircle</div>
+              <div className="auth-logo-sub">INVESTOR NETWORK</div>
+            </div>
+          </div>
+
+          {resetDone ? (
+            <>
+              <div className="auth-invite-status valid">
+                <span className="auth-invite-icon">✅</span>
+                <div>
+                  <div className="auth-invite-title">Password updated</div>
+                  <div className="auth-invite-sub">You can now log in with your new password. Redirecting you shortly…</div>
+                </div>
+              </div>
+              <p className="auth-switch">
+                <span onClick={() => { window.location.href = '/'; }}>Go to login now →</span>
+              </p>
+            </>
+          ) : resetConfirmingSame ? (
+            <>
+              <div className="auth-invite-status idle">
+                <span className="auth-invite-icon">🤔</span>
+                <div>
+                  <div className="auth-invite-title">Same as your current password</div>
+                  <div className="auth-invite-sub">Are you sure you want to keep it?</div>
+                </div>
+              </div>
+              {error && <div className="auth-error">{error}</div>}
+              <div className="auth-form">
+                <button className="auth-submit" disabled={loading} onClick={(e) => handleResetSubmit(e as unknown as FormEvent, true)}>
+                  {loading ? 'Please wait…' : 'Yes, keep this password'}
+                </button>
+                <p className="auth-switch">
+                  <span onClick={() => setResetConfirmingSame(false)}>← Choose a different one</span>
+                </p>
+              </div>
+            </>
+          ) : (
+            <form key="reset" className="auth-form" onSubmit={handleResetSubmit}>
+              <div className="auth-field">
+                <label>New password</label>
+                <input
+                  type="password"
+                  placeholder="Min. 6 characters"
+                  value={resetPass}
+                  onChange={e => setResetPass(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="auth-field">
+                <label>Confirm new password</label>
+                <input
+                  type="password"
+                  value={resetConfirm}
+                  onChange={e => setResetConfirm(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              {error && <div className="auth-error">{error}</div>}
+              <button className="auth-submit" type="submit" disabled={loading}>
+                {loading ? 'Please wait…' : 'Reset Password'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-bg">
       <div className="auth-card">
@@ -188,6 +365,83 @@ export default function AuthPage() {
           </div>
         </div>
 
+        {pendingLoginId ? (
+          <>
+            {/* Deliberately identical regardless of risk tier — whoever is at this
+                screen might be the attacker, and shouldn't learn anything about
+                whether (or how) detection was tripped. The real detail only ever
+                goes to the account owner's email. */}
+            <div className="auth-verify-status">
+              <span className="auth-invite-icon">🔒</span>
+              <div>
+                <div className="auth-invite-title">Verify it's you</div>
+                <div className="auth-invite-sub">
+                  For your security, we need to confirm this sign-in. Enter the code we've sent to the email on file to continue.
+                </div>
+              </div>
+            </div>
+
+            <form key="verify" className="auth-form" onSubmit={handleVerify}>
+              <div className="auth-field">
+                <label>Verification code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="auth-code-input"
+                  placeholder="••••••"
+                  maxLength={6}
+                  value={code}
+                  onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              {error && <div className="auth-error">{error}</div>}
+
+              <button className="auth-submit" type="submit" disabled={loading || code.length !== 6}>
+                {loading ? 'Verifying…' : 'Verify & Log In'}
+              </button>
+              <p className="auth-switch">
+                <span onClick={() => { setPendingLoginId(null); setCode(''); setError(''); }}>
+                  ← Back to login
+                </span>
+              </p>
+            </form>
+          </>
+        ) : mode === 'forgot' ? (
+          <>
+            {forgotSent ? (
+              <div className="auth-invite-status valid">
+                <span className="auth-invite-icon">✅</span>
+                <div className="auth-invite-sub">{forgotSent}</div>
+              </div>
+            ) : (
+              <form key="forgot" className="auth-form" onSubmit={handleForgotSubmit}>
+                <div className="auth-field">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </div>
+                {error && <div className="auth-error">{error}</div>}
+                <button className="auth-submit" type="submit" disabled={loading}>
+                  {loading ? 'Sending…' : 'Send Reset Link'}
+                </button>
+              </form>
+            )}
+            <p className="auth-switch">
+              <span onClick={() => { switchMode('login'); setForgotSent(''); }}>← Back to login</span>
+            </p>
+          </>
+        ) : (
+        <>
         <div className="auth-tabs">
           <button
             className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
@@ -229,6 +483,7 @@ export default function AuthPage() {
                 required
                 autoComplete="current-password"
               />
+              <span className="auth-forgot-link" onClick={() => switchMode('forgot')}>Forgot password?</span>
             </div>
 
             {error && <div className="auth-error">{error}</div>}
@@ -248,6 +503,8 @@ export default function AuthPage() {
             Have an invite?{' '}
             <span onClick={() => switchMode('register')}>Register</span>
           </p>
+        )}
+        </>
         )}
       </div>
     </div>

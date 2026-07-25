@@ -1,0 +1,136 @@
+.ncp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--bg-secondary, #1a1a1a);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.ncp-row {
+  display: flex;
+  gap: 14px;
+}
+.ncp-row .ncp-field { flex: 1; }
+
+.ncp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ncp-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.ncp-select,
+.ncp-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary, #111);
+  color: var(--text-primary, #000);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+.ncp-select:focus,
+.ncp-input:focus {
+  outline: none;
+  border-color: var(--accent, #4f9cf9);
+  box-shadow: 0 0 0 2px rgba(79, 156, 249, 0.15);
+}
+
+.ncp-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ncp-metric-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ncp-metric-row .ncp-input { flex: 2; }
+.ncp-metric-row .ncp-input-unit { flex: 1; }
+
+.ncp-metric-remove {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ncp-metric-remove:hover:not(:disabled) {
+  color: #f87171;
+  border-color: #f87171;
+}
+.ncp-metric-remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ncp-add-metric {
+  align-self: flex-start;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent, #4f9cf9);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.ncp-add-metric:hover {
+  text-decoration: underline;
+}
+
+.ncp-error {
+  font-size: 0.82rem;
+  color: #f87171;
+}
+
+.ncp-submit {
+  align-self: flex-end;
+  padding: 9px 24px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent, #4f9cf9);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.1s;
+}
+.ncp-submit:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.ncp-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (prefers-color-scheme: light) {
+  .ncp-input,
+  .ncp-select {
+    background: #fff;
+    color: #000;
+  }
+}
+
+@media (max-width: 640px) {
+  .ncp-row {
+    flex-direction: column;
+  }
+}

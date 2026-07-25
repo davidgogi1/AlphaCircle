@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export interface IMetricDef {
   key:          string;
@@ -14,6 +14,7 @@ export interface IConsensusEvent extends Document {
   eventType: string;
   eventDate: Date;
   metrics:   IMetricDef[];
+  author?:   Types.ObjectId;
   createdAt: Date;
 }
 
@@ -31,6 +32,7 @@ const ConsensusEventSchema = new Schema<IConsensusEvent>({
   eventType: { type: String, required: true, default: 'Earnings Release' },
   eventDate: { type: Date,   required: true },
   metrics:   { type: [MetricDefSchema], required: true },
+  author:    { type: Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date,   default: Date.now },
 });
 

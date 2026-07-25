@@ -88,7 +88,6 @@
   border-color: rgba(59, 130, 246, 0.3);
   color: #3b82f6;
 }
-.disc-chip-sector:hover,
 .disc-chip-sector.active {
   background: #3b82f6;
   border-color: #3b82f6;
@@ -101,7 +100,6 @@
   border-color: rgba(0, 201, 177, 0.3);
   color: var(--accent);
 }
-.disc-chip-topic:hover,
 .disc-chip-topic.active {
   background: var(--accent);
   border-color: var(--accent);
@@ -114,11 +112,31 @@
   border-color: rgba(245, 158, 11, 0.3);
   color: #f59e0b;
 }
-.disc-chip-company:hover,
 .disc-chip-company.active {
   background: #f59e0b;
   border-color: #f59e0b;
   color: #000;
+}
+
+/* Hover recoloring only for devices with a real pointer (mouse) — touch
+   browsers latch :hover onto the last-tapped element and never release it,
+   which made a just-deselected chip keep rendering as if still selected. */
+@media (hover: hover) and (pointer: fine) {
+  .disc-chip-sector:hover {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+  .disc-chip-topic:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+  }
+  .disc-chip-company:hover {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    color: #000;
+  }
 }
 
 /* ── Main feed ── */

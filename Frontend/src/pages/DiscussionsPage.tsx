@@ -263,7 +263,7 @@ export default function DiscussionsPage() {
               <div className="disc-section">
                 <div className="disc-section-label">🔥 Trending</div>
                 <div className="disc-thread-list disc-thread-list--trending">
-                  {trending.slice(0, 6).map(t => renderThreadCard(t, '🔥'))}
+                  {trending.slice(0, 4).map(t => renderThreadCard(t, '🔥'))}
                 </div>
               </div>
             )}

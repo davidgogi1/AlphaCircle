@@ -3,6 +3,7 @@ import path from "path";
 import { createServer } from "http";
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
 import { connectDB } from "./config/db";
@@ -28,6 +29,7 @@ const PORT       = process.env.PORT || 5000;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use("/api/auth",        authRoutes);

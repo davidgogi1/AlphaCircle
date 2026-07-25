@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useGroupNotifications } from "../../contexts/GroupNotificationsContext";
+import { useMessageNotifications } from "../../contexts/MessageNotificationsContext";
 import UserAvatar from "../UserAvatar";
 import "./Sidebar.css";
 
@@ -9,9 +10,9 @@ const navItems = [
   { label: "Feed", icon: "⊞", path: "/" },
   { label: "My Page", icon: "🧑", path: "/my-page" },
   { label: "Members", icon: "👥", path: "/members" },
-  { label: "Messages", icon: "✉️", path: "/messages" },
+  { label: "Messages", icon: "✉️", path: "/messages", badge: "messages" },
   { label: "Discussions", icon: "💬", path: "/discussions" },
-  { label: "Chat Groups", icon: "🗨️", path: "/chat-groups", badge: true },
+  { label: "Chat Groups", icon: "🗨️", path: "/chat-groups", badge: "chat" },
   { label: "News", icon: "📰", path: "/news" },
   { label: "Short Videos", icon: "▶", path: "/videos" },
   { label: "Saved", icon: "🔖", path: "/saved" },
@@ -22,7 +23,7 @@ const bottomNavItems = [
   { label: "Feed", icon: "⊞", path: "/" },
   { label: "Discuss", icon: "💬", path: "/discussions" },
   { label: "My Page", icon: "🧑", path: "/my-page" },
-  { label: "Messages", icon: "✉️", path: "/messages" },
+  { label: "Messages", icon: "✉️", path: "/messages", badge: "messages" },
 ];
 
 const drawerItems = [
@@ -39,7 +40,9 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { pendingCount, transferOfferCount, totalUnread } =
     useGroupNotifications();
+  const { totalUnread: totalUnreadMessages } = useMessageNotifications();
   const chatBadge = totalUnread + pendingCount + transferOfferCount;
+  const badgeCounts: Record<string, number> = { chat: chatBadge, messages: totalUnreadMessages };
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleDrawerNav = (path: string) => {
@@ -81,8 +84,8 @@ export default function Sidebar() {
             >
               <span className="nav-icon">{icon}</span>
               <span>{label}</span>
-              {badge && chatBadge > 0 && (
-                <span className="nav-badge">{chatBadge}</span>
+              {badge && badgeCounts[badge] > 0 && (
+                <span className="nav-badge">{badgeCounts[badge]}</span>
               )}
             </NavLink>
           ))}
@@ -106,14 +109,19 @@ export default function Sidebar() {
 
       {/* ── Mobile bottom nav ── */}
       <nav className="bottom-nav">
-        {bottomNavItems.map(({ label, icon, path }) => (
+        {bottomNavItems.map(({ label, icon, path, badge }) => (
           <NavLink
             key={path}
             to={path}
             end={path === "/"}
             className={({ isActive }) => `bn-item${isActive ? " active" : ""}`}
           >
-            <span className="bn-icon">{icon}</span>
+            <span className="bn-icon">
+              {icon}
+              {badge && badgeCounts[badge] > 0 && (
+                <span className="nav-badge bn-badge">{badgeCounts[badge]}</span>
+              )}
+            </span>
             <span className="bn-label">{label}</span>
           </NavLink>
         ))}

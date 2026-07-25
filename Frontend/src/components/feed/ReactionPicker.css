@@ -14,7 +14,6 @@
   transition: background 0.15s, color 0.15s;
   user-select: none;
 }
-.rp-trigger:hover   { background: var(--bg-hover); color: var(--text-primary); }
 .rp-trigger.reacted { color: var(--accent); }
 .rp-trigger span    { font-size: 13px; font-weight: 600; }
 
@@ -51,7 +50,6 @@
   height: 10px;
 }
 
-.rp-wrap:hover .rp-picker,
 .rp-picker.open {
   opacity: 1;
   pointer-events: all;
@@ -65,8 +63,20 @@
   transition: transform 0.1s, background 0.1s;
   line-height: 1;
 }
-.rp-emoji:hover  { transform: scale(1.35); background: var(--bg-hover); }
 .rp-emoji.active { transform: scale(1.2);  background: rgba(0,201,177,0.15); }
+
+/* Hover-driven reveal/highlight only for devices with a real pointer (mouse) —
+   touch browsers latch :hover onto the last-tapped element and never release
+   it, which kept the picker pinned open over an already-applied reaction. */
+@media (hover: hover) and (pointer: fine) {
+  .rp-trigger:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .rp-wrap:hover .rp-picker {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0) scale(1);
+  }
+  .rp-emoji:hover { transform: scale(1.35); background: var(--bg-hover); }
+}
 
 /* Compact variant for comment reactions */
 .rp-compact .rp-trigger         { padding: 3px 8px; font-size: 12px; }

@@ -6,10 +6,8 @@ CURRENT="alphacircle"
 NEW="alphacircle_new"
 OLD="alphacircle_old"
 
-echo "▶ Selecting Node version..."
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-nvm use 22
 
 echo "▶ Building frontend..."
 npm run build

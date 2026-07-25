@@ -19,6 +19,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [includeBio, setIncludeBio] = useState(false);
   const [pending, setPending] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -62,9 +63,13 @@ export default function UsersPage() {
     }
   };
 
-  const filtered = users.filter((u) =>
-    u.username.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = users.filter((u) => {
+    const q = search.toLowerCase();
+    return (
+      u.username.toLowerCase().includes(q) ||
+      (includeBio && (u.bio ?? "").toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="users-page">
@@ -75,12 +80,22 @@ export default function UsersPage() {
         </p>
       </div>
 
-      <input
-        className="users-search"
-        placeholder="Search by username…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="users-search-row">
+        <input
+          className="users-search"
+          placeholder="Search by a member…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <label className="users-search-bio-toggle">
+          <input
+            type="checkbox"
+            checked={includeBio}
+            onChange={(e) => setIncludeBio(e.target.checked)}
+          />
+          Include bio
+        </label>
+      </div>
 
       {loading && <div className="users-status">Loading…</div>}
       {error && <div className="users-status error">{error}</div>}
@@ -93,24 +108,41 @@ export default function UsersPage() {
 
       <div className="users-grid">
         {filtered.map((u) => (
-          <div key={u._id} className="user-card" onClick={() => navigate(`/members/${u._id}`)}>
+          <div
+            key={u._id}
+            className="user-card"
+            onClick={() => navigate(`/members/${u._id}`)}
+          >
             <UserAvatar username={u.username} avatar={u.avatar} size={46} />
             <div className="uc-info">
               <span className="uc-username">{u.username}</span>
-              {u.bio
-                ? <span className="uc-bio">{u.bio}</span>
-                : <span className="uc-since">Joined {new Date(u.createdAt).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</span>
-              }
+              {u.bio ? (
+                <span className="uc-bio">{u.bio}</span>
+              ) : (
+                <span className="uc-since">
+                  Joined{" "}
+                  {new Date(u.createdAt).toLocaleDateString("en-GB", {
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              )}
             </div>
             <button
               className="uc-msg-btn"
-              onClick={(e) => { e.stopPropagation(); navigate(`/messages/${u._id}`); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/messages/${u._id}`);
+              }}
             >
               ✉
             </button>
             <button
               className={`uc-follow-btn ${u.isFollowing ? "following" : ""}`}
-              onClick={(e) => { e.stopPropagation(); handleFollow(u._id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFollow(u._id);
+              }}
               disabled={pending.has(u._id)}
             >
               {u.isFollowing ? "Unfollow" : "Follow"}

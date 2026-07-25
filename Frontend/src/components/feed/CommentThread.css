@@ -75,6 +75,16 @@
   padding-left: 36px;
 }
 
+.ct-att-img-link { display: block; padding-left: 36px; margin-bottom: 6px; }
+.ct-att-doc-wrap { padding-left: 36px; margin-bottom: 6px; max-width: 280px; }
+.ct-att-img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  display: block;
+  cursor: zoom-in;
+}
+
 .ct-reaction-summary {
   display: flex; flex-wrap: wrap; gap: 4px;
   padding-left: 36px;
@@ -121,8 +131,42 @@
   font-size: 9px; font-weight: 700; color: #000;
 }
 
-.ct-reply-input {
+.ct-reply-file-input { display: none; }
+
+.ct-reply-attach-btn {
+  width: 26px; height: 26px; flex-shrink: 0;
+  font-size: 14px;
+  color: var(--text-dim);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.ct-reply-attach-btn:hover { background: var(--bg-hover); color: var(--accent); }
+
+.ct-reply-input-wrap {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ct-reply-file-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,201,177,0.08);
+  border: 1px solid rgba(0,201,177,0.25);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.ct-reply-file-preview-name   { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+.ct-reply-file-preview-remove { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+.ct-reply-file-preview-remove:hover { color: var(--red); }
+
+.ct-reply-input {
+  width: 100%;
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 16px;

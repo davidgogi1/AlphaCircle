@@ -4,7 +4,7 @@ import { uploadFile } from '../middleware/upload';
 import {
   getMyGroups, createGroup, getGroup,
   respondToInvite, inviteMembers,
-  getMessages, sendGroupMessage, markAsRead, removeMember, leaveGroup, deleteGroup,
+  getMessages, sendGroupMessage, reactToGroupMessage, markAsRead, removeMember, leaveGroup, deleteGroup,
   offerAdminTransfer, cancelAdminTransfer, respondAdminTransfer,
 } from '../controllers/chatGroupController';
 
@@ -18,6 +18,7 @@ router.post('/:id/respond',        respondToInvite);
 router.post('/:id/invite',         inviteMembers);
 router.get('/:id/messages',        getMessages);
 router.post('/:id/messages',       uploadFile.single('file'), sendGroupMessage);
+router.post('/:id/messages/:messageId/react', reactToGroupMessage);
 router.post('/:id/read',           markAsRead);
 router.delete('/:id/members/:userId', removeMember);
 router.post('/:id/leave',                   leaveGroup);

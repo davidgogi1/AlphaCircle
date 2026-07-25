@@ -212,7 +212,97 @@
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
 }
+.mp-bubble-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 3px solid rgba(0,0,0,0.25);
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.08);
+  font-size: 12px;
+}
+.mp-bubble.theirs .mp-bubble-quote { border-left-color: var(--accent); background: var(--bg-hover); }
+.mp-bubble-quote-sender { font-weight: 700; }
+.mp-bubble-quote-text {
+  opacity: 0.8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+}
+
+.mp-bubble-reactions { display: flex; gap: 4px; padding: 0 4px; }
+.mp-bubble-reaction-chip {
+  font-size: 11px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 6px;
+}
+
+.mp-bubble-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mp-bubble-row.mine  .mp-bubble-footer { flex-direction: row-reverse; }
 .mp-bubble-time { font-size: 10px; color: var(--text-dim); padding: 0 4px; }
+
+.mp-bubble-line { display: block; }
+.mp-consensus-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  background: rgba(0,0,0,0.12);
+  color: inherit;
+  transition: filter 0.15s;
+}
+.mp-bubble.theirs .mp-consensus-link { background: var(--bg-hover); color: var(--accent); }
+.mp-consensus-link:hover { filter: brightness(1.1); }
+
+.mp-bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mp-reply-btn {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border-radius: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* On touch devices the action row stays visible (no hover to depend on).
+   On real pointer devices, reveal it on hover only, to keep bubbles clean. */
+@media (hover: hover) and (pointer: fine) {
+  .mp-bubble-actions { opacity: 0; transition: opacity 0.15s; }
+  .mp-bubble-row:hover .mp-bubble-actions { opacity: 1; }
+  .mp-reply-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+}
+
+/* Reply-preview strip above the compose bar */
+.mp-reply-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.mp-reply-preview-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mp-reply-preview-label { font-size: 11px; font-weight: 700; color: var(--accent); }
+.mp-reply-preview-text {
+  font-size: 12px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mp-reply-preview-cancel { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.mp-reply-preview-cancel:hover { color: var(--red); }
 
 /* Input bar */
 .mp-input-bar {

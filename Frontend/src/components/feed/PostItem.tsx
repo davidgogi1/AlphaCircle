@@ -1,4 +1,4 @@
-import { useState, useRef, type FormEvent } from 'react';
+import { useState, useRef, type ClipboardEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSaved } from '../../contexts/SavedContext';
@@ -29,6 +29,7 @@ interface FlatComment {
   createdAt: string;
   parent: string | null;
   reactions?: { user: string; type: string }[];
+  attachment?: { filename: string; originalName: string; mimetype: string; size: number };
 }
 
 interface Props {
@@ -43,6 +44,22 @@ function timeAgo(date: string): string {
   if (sec < 3600)  return `${Math.floor(sec / 60)}m ago`;
   if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
   return `${Math.floor(sec / 86400)}d ago`;
+}
+
+function renderContent(content: string, onHashtagClick: (tag: string) => void) {
+  return content.split(/(#\w+)/g).map((part, i) =>
+    /^#\w+$/.test(part) ? (
+      <span
+        key={i}
+        className="pi-hashtag"
+        onClick={(e) => { e.stopPropagation(); onHashtagClick(part.slice(1).toLowerCase()); }}
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 }
 
 function buildTree(flat: FlatComment[]): CommentNode[] {
@@ -101,7 +118,9 @@ export default function PostItem({ post, onUpdate, onDelete }: Props) {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentCount,    setCommentCount]    = useState(post.commentCount ?? 0);
   const [rootInput,       setRootInput]       = useState('');
+  const [rootFile,        setRootFile]        = useState<File | null>(null);
   const [submittingRoot,  setSubmittingRoot]  = useState(false);
+  const rootFileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Reactions ──────────────────────────────────────────────────────────────
   const reactionCounts = reactions.reduce<Record<string, number>>((acc, r) => {
@@ -147,21 +166,57 @@ export default function PostItem({ post, onUpdate, onDelete }: Props) {
   // Root-level comment submit
   const handleRootComment = async (e: FormEvent) => {
     e.preventDefault();
-    if (!rootInput.trim() || submittingRoot) return;
+    if ((!rootInput.trim() && !rootFile) || submittingRoot) return;
     setSubmittingRoot(true);
+    const text = rootInput.trim();
+    const file = rootFile;
     try {
-      const data = await api.post(`/posts/${post._id}/comments`, { content: rootInput.trim() });
+      let data;
+      if (file) {
+        const fd = new FormData();
+        fd.append('file', file);
+        if (text) fd.append('content', text);
+        data = await apiUpload('POST', `/posts/${post._id}/comments`, fd);
+      } else {
+        data = await api.post(`/posts/${post._id}/comments`, { content: text });
+      }
       setFlatComments(prev => [...prev, data.comment]);
       setCommentCount(c => c + 1);
       setRootInput('');
+      setRootFile(null);
+      if (rootFileInputRef.current) rootFileInputRef.current.value = '';
     } finally {
       setSubmittingRoot(false);
     }
   };
 
+  const handleRootPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          setRootFile(file);
+        }
+        break;
+      }
+    }
+  };
+
   // Reply to a specific comment
-  const handleReply = async (parentId: string, content: string) => {
-    const data = await api.post(`/posts/${post._id}/comments`, { content, parentId });
+  const handleReply = async (parentId: string, content: string, file?: File) => {
+    let data;
+    if (file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('parentId', parentId);
+      if (content) fd.append('content', content);
+      data = await apiUpload('POST', `/posts/${post._id}/comments`, fd);
+    } else {
+      data = await api.post(`/posts/${post._id}/comments`, { content, parentId });
+    }
     setFlatComments(prev => [...prev, data.comment]);
     setCommentCount(c => c + 1);
   };
@@ -344,7 +399,7 @@ export default function PostItem({ post, onUpdate, onDelete }: Props) {
       {mode === 'view' && (
         <>
           {post.title && <h3 className="pi-title">{post.title}</h3>}
-          <p className="pi-content">{post.content}</p>
+          <p className="pi-content">{renderContent(post.content, tag => navigate(`/hashtag/${tag}`))}</p>
           {post.attachment && <AttachmentBadge attachment={post.attachment} />}
 
           {Object.keys(reactionCounts).length > 0 && (
@@ -398,14 +453,31 @@ export default function PostItem({ post, onUpdate, onDelete }: Props) {
                     {user?.username.slice(0, 2).toUpperCase()}
                   </div>
                   <input
-                    className="pi-comment-input"
-                    placeholder="Write a comment…"
-                    value={rootInput}
-                    onChange={e => setRootInput(e.target.value)}
-                    maxLength={500}
+                    ref={rootFileInputRef}
+                    type="file"
+                    className="pi-comment-file-input"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                    onChange={e => setRootFile(e.target.files?.[0] ?? null)}
                   />
+                  <button type="button" className="pi-comment-attach-btn" onClick={() => rootFileInputRef.current?.click()} title="Attach file">📎</button>
+                  <div className="pi-comment-input-wrap">
+                    {rootFile && (
+                      <div className="pi-comment-file-preview">
+                        <span className="pi-comment-file-preview-name">{rootFile.name}</span>
+                        <button type="button" className="pi-comment-file-preview-remove" onClick={() => { setRootFile(null); if (rootFileInputRef.current) rootFileInputRef.current.value = ''; }}>✕</button>
+                      </div>
+                    )}
+                    <input
+                      className="pi-comment-input"
+                      placeholder={rootFile ? 'Add a caption… (optional)' : 'Write a comment… (paste a screenshot to attach it)'}
+                      value={rootInput}
+                      onChange={e => setRootInput(e.target.value)}
+                      onPaste={handleRootPaste}
+                      maxLength={500}
+                    />
+                  </div>
                   <button className="pi-comment-submit" type="submit"
-                    disabled={submittingRoot || !rootInput.trim()}>
+                    disabled={submittingRoot || (!rootInput.trim() && !rootFile)}>
                     {submittingRoot ? '…' : 'Post'}
                   </button>
                 </div>

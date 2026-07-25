@@ -18,7 +18,7 @@ export const getComments = async (req: Request, res: Response): Promise<void> =>
 export const addComment = async (req: Request, res: Response): Promise<void> => {
   try {
     const { content, parentId } = req.body;
-    if (!content?.trim()) { res.status(400).json({ message: 'Content is required' }); return; }
+    if (!content?.trim() && !req.file) { res.status(400).json({ message: 'Content is required' }); return; }
 
     const post = await Post.findById(req.params.id);
     if (!post) { res.status(404).json({ message: 'Post not found' }); return; }
@@ -29,11 +29,16 @@ export const addComment = async (req: Request, res: Response): Promise<void> => 
       if (!parent) { res.status(400).json({ message: 'Invalid parent comment' }); return; }
     }
 
+    const attachment = req.file
+      ? { filename: req.file.filename, originalName: req.file.originalname, mimetype: req.file.mimetype, size: req.file.size }
+      : undefined;
+
     const comment = await Comment.create({
       post:   post._id,
       author: req.userId,
-      content: content.trim(),
+      content: content?.trim() ?? '',
       parent: parentId ? new mongoose.Types.ObjectId(parentId) : null,
+      attachment,
     });
     await comment.populate('author', 'username');
 

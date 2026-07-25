@@ -9,6 +9,8 @@ export interface IUser extends Document {
   stocks:          string[];
   profileComplete: boolean;
   registrationIp:  string;
+  failedLoginAttempts: number;
+  lockedUntil:     Date | null;
   createdAt:       Date;
   // profile fields
   investingSince:  number;
@@ -28,6 +30,8 @@ const UserSchema = new Schema<IUser>({
   stocks:          { type: [String], default: [] },
   profileComplete: { type: Boolean, default: false },
   registrationIp:  { type: String, default: '' },
+  failedLoginAttempts: { type: Number, default: 0 },
+  lockedUntil:     { type: Date, default: null },
   createdAt:       { type: Date, default: Date.now },
   investingSince:  { type: Number, default: null },
   role:            { type: String, default: '' },

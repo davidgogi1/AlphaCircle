@@ -19,6 +19,8 @@ export interface IPost extends Document {
   reactions:    Types.DocumentArray<IReaction & { _id: Types.ObjectId }>;
   commentCount: number;
   attachment?:  IAttachment;
+  embedding?:   number[];
+  hashtags:     string[];
   createdAt:    Date;
 }
 
@@ -42,8 +44,11 @@ const PostSchema = new Schema<IPost>({
   reactions:    { type: [ReactionSchema], default: [] },
   commentCount: { type: Number, default: 0 },
   attachment:   { type: AttachmentSchema, default: null },
+  embedding:    { type: [Number], select: false },
+  hashtags:     { type: [String], default: [] },
   createdAt:    { type: Date, default: Date.now },
 });
 
 PostSchema.index({ createdAt: -1 });
+PostSchema.index({ hashtags: 1 });
 export default mongoose.model<IPost>('Post', PostSchema);

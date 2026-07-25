@@ -1,7 +1,15 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
 import ReactionPicker from './ReactionPicker';
+import AttachmentBadge from './AttachmentBadge';
 import { EMOJI } from './reactions';
 import './CommentThread.css';
+
+export interface CommentAttachment {
+  filename: string;
+  originalName: string;
+  mimetype: string;
+  size: number;
+}
 
 export interface CommentNode {
   _id: string;
@@ -10,7 +18,24 @@ export interface CommentNode {
   createdAt: string;
   parent: string | null;
   reactions?: { user: string; type: string }[];
+  attachment?: CommentAttachment;
   replies: CommentNode[];
+}
+
+function CommentAttachmentView({ attachment }: { attachment: CommentAttachment }) {
+  const url = `/uploads/${attachment.filename}`;
+  if (attachment.mimetype.startsWith('image/')) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="ct-att-img-link">
+        <img src={url} alt={attachment.originalName} className="ct-att-img" />
+      </a>
+    );
+  }
+  return (
+    <div className="ct-att-doc-wrap">
+      <AttachmentBadge attachment={attachment} />
+    </div>
+  );
 }
 
 function timeAgo(date: string): string {
@@ -27,7 +52,7 @@ interface ItemProps {
   postAuthorId:     string;
   currentUserId:    string | undefined;
   currentUsername:  string | undefined;
-  onReply:          (parentId: string, content: string) => Promise<void>;
+  onReply:          (parentId: string, content: string, file?: File) => Promise<void>;
   onDelete:         (commentId: string) => void;
   onReactToComment: (commentId: string, type: string) => Promise<void>;
 }
@@ -35,8 +60,10 @@ interface ItemProps {
 function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername, onReply, onDelete, onReactToComment }: ItemProps) {
   const [showReply,     setShowReply]     = useState(false);
   const [replyContent,  setReplyContent]  = useState('');
+  const [replyFile,     setReplyFile]     = useState<File | null>(null);
   const [submitting,    setSubmitting]    = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const replyFileInputRef = useRef<HTMLInputElement>(null);
 
   const canDelete  = currentUserId === node.author._id || currentUserId === postAuthorId;
   const initials   = node.author.username.slice(0, 2).toUpperCase();
@@ -50,14 +77,31 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
 
   const handleReply = async (e: FormEvent) => {
     e.preventDefault();
-    if (!replyContent.trim() || submitting) return;
+    if ((!replyContent.trim() && !replyFile) || submitting) return;
     setSubmitting(true);
     try {
-      await onReply(node._id, replyContent.trim());
+      await onReply(node._id, replyContent.trim(), replyFile ?? undefined);
       setReplyContent('');
+      setReplyFile(null);
+      if (replyFileInputRef.current) replyFileInputRef.current.value = '';
       setShowReply(false);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleReplyPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          setReplyFile(file);
+        }
+        break;
+      }
     }
   };
 
@@ -84,7 +128,8 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
           )}
         </div>
 
-        <p className="ct-content">{node.content}</p>
+        {node.attachment && <CommentAttachmentView attachment={node.attachment} />}
+        {node.content && <p className="ct-content">{node.content}</p>}
 
         {/* Reaction summary */}
         {Object.keys(reactionCounts).length > 0 && (
@@ -115,15 +160,32 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
             <div className="ct-reply-row">
               <div className="ct-self-avatar">{selfInit}</div>
               <input
-                className="ct-reply-input"
-                placeholder={`Reply to ${node.author.username}…`}
-                value={replyContent}
-                onChange={e => setReplyContent(e.target.value)}
-                maxLength={500}
-                autoFocus
+                ref={replyFileInputRef}
+                type="file"
+                className="ct-reply-file-input"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                onChange={e => setReplyFile(e.target.files?.[0] ?? null)}
               />
+              <button type="button" className="ct-reply-attach-btn" onClick={() => replyFileInputRef.current?.click()} title="Attach file">📎</button>
+              <div className="ct-reply-input-wrap">
+                {replyFile && (
+                  <div className="ct-reply-file-preview">
+                    <span className="ct-reply-file-preview-name">{replyFile.name}</span>
+                    <button type="button" className="ct-reply-file-preview-remove" onClick={() => { setReplyFile(null); if (replyFileInputRef.current) replyFileInputRef.current.value = ''; }}>✕</button>
+                  </div>
+                )}
+                <input
+                  className="ct-reply-input"
+                  placeholder={replyFile ? 'Add a caption… (optional)' : `Reply to ${node.author.username}…`}
+                  value={replyContent}
+                  onChange={e => setReplyContent(e.target.value)}
+                  onPaste={handleReplyPaste}
+                  maxLength={500}
+                  autoFocus
+                />
+              </div>
               <button className="ct-reply-submit" type="submit"
-                disabled={submitting || !replyContent.trim()}>
+                disabled={submitting || (!replyContent.trim() && !replyFile)}>
                 {submitting ? '…' : 'Post'}
               </button>
             </div>
@@ -153,7 +215,7 @@ interface ThreadProps {
   postAuthorId:      string;
   currentUserId:     string | undefined;
   currentUsername:   string | undefined;
-  onReply:           (parentId: string, content: string) => Promise<void>;
+  onReply:           (parentId: string, content: string, file?: File) => Promise<void>;
   onDelete:          (commentId: string) => void;
   onReactToComment:  (commentId: string, type: string) => Promise<void>;
 }

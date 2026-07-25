@@ -4,11 +4,12 @@ import { api } from '../api';
 import './SearchPage.css';
 
 interface SearchUser   { _id: string; username: string; email: string; }
-interface SearchPost   { _id: string; title?: string; content: string; author: { username: string }; createdAt: string; }
+interface SearchPost   { _id: string; title?: string; content: string; author: { _id: string; username: string }; createdAt: string; matchType?: 'semantic'; }
 interface SearchTag    { _id: string; name: string; slug: string; icon: string; }
-interface SearchThread { _id: string; title: string; content: string; author: { username: string }; firstTag: SearchTag | null; commentCount: number; createdAt: string; }
+interface SearchThread { _id: string; title: string; content: string; author: { username: string }; firstTag: SearchTag | null; commentCount: number; createdAt: string; matchType?: 'semantic'; }
+interface SearchPoll   { _id: string; company: string; ticker: string; period: string; eventType: string; eventDate: string; }
 
-type Tab = 'all' | 'posts' | 'threads' | 'users';
+type Tab = 'all' | 'posts' | 'threads' | 'users' | 'polls';
 
 function timeAgo(date: string): string {
   const sec = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -40,6 +41,7 @@ export default function SearchPage() {
   const [users,   setUsers]   = useState<SearchUser[]>([]);
   const [posts,   setPosts]   = useState<SearchPost[]>([]);
   const [threads, setThreads] = useState<SearchThread[]>([]);
+  const [polls,   setPolls]   = useState<SearchPoll[]>([]);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
@@ -47,18 +49,19 @@ export default function SearchPage() {
     if (q.length < 2) return;
     setLoading(true); setError('');
     api.get(`/search?q=${encodeURIComponent(q)}&limit=20`)
-      .then(d => { setUsers(d.users); setPosts(d.posts); setThreads(d.threads); })
+      .then(d => { setUsers(d.users); setPosts(d.posts); setThreads(d.threads); setPolls(d.polls); })
       .catch(() => setError('Search failed. Try again.'))
       .finally(() => setLoading(false));
   }, [q]);
 
-  const total = users.length + posts.length + threads.length;
+  const total = users.length + posts.length + threads.length + polls.length;
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'all',     label: 'All',         count: total },
     { key: 'posts',   label: 'Posts',       count: posts.length },
     { key: 'threads', label: 'Discussions', count: threads.length },
     { key: 'users',   label: 'Members',    count: users.length },
+    { key: 'polls',   label: 'Polls',      count: polls.length },
   ];
 
   if (!q || q.length < 2) {
@@ -114,8 +117,13 @@ export default function SearchPage() {
             <section className="sp-section">
               {tab === 'all' && <div className="sp-section-label">Posts</div>}
               {posts.map(p => (
-                <div key={p._id} className="sp-card">
+                <div
+                  key={p._id}
+                  className="sp-card sp-card-link"
+                  onClick={() => navigate(`/members/${p.author._id}?highlightPost=${p._id}`)}
+                >
                   <div className="sp-card-meta">
+                    {p.matchType === 'semantic' && <span className="sp-topic-badge" title="Matched by meaning, not exact keywords">✨ AI match</span>}
                     <span className="sp-card-author">{p.author.username}</span>
                     <span className="sp-card-time">{timeAgo(p.createdAt)}</span>
                   </div>
@@ -149,6 +157,7 @@ export default function SearchPage() {
                     {t.firstTag && (
                       <span className="sp-topic-badge">{t.firstTag.icon} {t.firstTag.name}</span>
                     )}
+                    {t.matchType === 'semantic' && <span className="sp-topic-badge" title="Matched by meaning, not exact keywords">✨ AI match</span>}
                     <span className="sp-card-author">{t.author.username}</span>
                     <span className="sp-card-time">{timeAgo(t.createdAt)}</span>
                   </div>
@@ -158,6 +167,27 @@ export default function SearchPage() {
                     {t.content.length > 160 ? '…' : ''}
                   </p>
                   <div className="sp-card-footer">💬 {t.commentCount}</div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* Polls (BuySide Consensus) */}
+          {(tab === 'all' || tab === 'polls') && polls.length > 0 && (
+            <section className="sp-section">
+              {tab === 'all' && <div className="sp-section-label">Polls</div>}
+              {polls.map(p => (
+                <div
+                  key={p._id}
+                  className="sp-card sp-card-link"
+                  onClick={() => navigate('/consensus')}
+                >
+                  <div className="sp-card-meta">
+                    <span className="sp-topic-badge">🤝 {p.eventType}</span>
+                    <span className="sp-card-time">{new Date(p.eventDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                  <h4 className="sp-card-title"><Mark text={`${p.ticker} · ${p.company}`} q={q} /></h4>
+                  <p className="sp-card-content">{p.period}</p>
                 </div>
               ))}
             </section>

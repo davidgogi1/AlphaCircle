@@ -21,6 +21,7 @@ export interface IThread extends Document {
   reactions:    Types.DocumentArray<IThreadReaction & { _id: Types.ObjectId }>;
   commentCount: number;
   attachment?:  IThreadAttachment;
+  embedding?:   number[];
   createdAt:    Date;
 }
 
@@ -46,6 +47,7 @@ const ThreadSchema = new Schema<IThread>({
   reactions:    { type: [ReactionSchema], default: [] },
   commentCount: { type: Number, default: 0 },
   attachment:   { type: AttachmentSchema, default: null },
+  embedding:    { type: [Number], select: false },
   createdAt:    { type: Date, default: Date.now },
 });
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { upload }         from '../middleware/upload';
+import { upload, uploadFile } from '../middleware/upload';
 import {
   getTrending,
   getTopics, getTagsGrouped,
@@ -36,7 +36,7 @@ router.delete('/threads/:threadId',           authMiddleware, deleteThread);
 router.post(  '/threads/:threadId/react',     authMiddleware, reactToThread);
 router.get(   '/threads/:threadId/reactions', authMiddleware, getThreadReactions);
 router.get(   '/threads/:threadId/comments',  authMiddleware, getThreadComments);
-router.post(  '/threads/:threadId/comments',  authMiddleware, addThreadComment);
+router.post(  '/threads/:threadId/comments',  authMiddleware, uploadFile.single('file'), addThreadComment);
 router.delete('/threads/:threadId/comments/:commentId',       authMiddleware, deleteThreadComment);
 router.post( '/threads/:threadId/comments/:commentId/react', authMiddleware, reactToThreadComment);
 

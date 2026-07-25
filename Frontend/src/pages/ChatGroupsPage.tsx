@@ -1,13 +1,37 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ClipboardEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useGroupNotifications } from '../contexts/GroupNotificationsContext';
 import { api, apiUpload } from '../api';
+import ReactionPicker from '../components/feed/ReactionPicker';
+import { EMOJI } from '../components/feed/reactions';
+import { extractConsensusLinkId } from '../utils/consensusLink';
 import './ChatGroupsPage.css';
+
+function MessageContent({ content }: { content: string }) {
+  return (
+    <>
+      {content.split('\n').map((line, i) => {
+        const consensusId = extractConsensusLinkId(line);
+        if (consensusId) {
+          return (
+            <Link key={i} to={`/consensus/${consensusId}`} className="cg-consensus-link">
+              📊 Open Consensus Poll →
+            </Link>
+          );
+        }
+        return <span key={i} className="cg-bubble-line">{line}</span>;
+      })}
+    </>
+  );
+}
 
 interface Member       { user: { _id: string; username: string }; status: string; _id: string; }
 interface Group        { _id: string; name: string; creator: { _id: string; username: string }; members: Member[]; pendingAdminTransfer?: string; createdAt: string; }
 interface Attachment   { filename: string; originalname: string; mimetype: string; size: number; }
-interface GroupMessage { _id: string; sender: { _id: string; username: string }; content: string; attachment?: Attachment; createdAt: string; group?: string; }
+interface Reaction     { user: string; type: string; }
+interface ReplyPreview { _id: string; content: string; sender: { _id: string; username: string }; }
+interface GroupMessage { _id: string; sender: { _id: string; username: string }; content: string; attachment?: Attachment; reactions: Reaction[]; replyTo?: ReplyPreview | null; createdAt: string; group?: string; }
 interface UserRow      { _id: string; username: string; }
 
 function formatBytes(n: number) {
@@ -59,6 +83,7 @@ export default function ChatGroupsPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isDragging,  setIsDragging]  = useState(false);
+  const [replyingTo,  setReplyingTo]  = useState<GroupMessage | null>(null);
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
@@ -110,10 +135,21 @@ export default function ChatGroupsPage() {
     };
 
     socket.on('group_message', onMessage);
-    return () => { socket.off('group_message', onMessage); };
+
+    const onReaction = ({ messageId, group, reactions }: { messageId: string; group: string; reactions: Reaction[] }) => {
+      if (group !== activeGroupRef.current) return;
+      setMessages(prev => prev.map(m => (m._id === messageId ? { ...m, reactions } : m)));
+    };
+    socket.on('group_message_reaction', onReaction);
+
+    return () => {
+      socket.off('group_message', onMessage);
+      socket.off('group_message_reaction', onReaction);
+    };
   }, [socket, user?.id, markRead]);
 
   useEffect(() => {
+    setReplyingTo(null);
     if (!activeGroup) { setMessages([]); return; }
     setLoadingMsgs(true);
     markRead(activeGroup._id);
@@ -156,14 +192,31 @@ export default function ChatGroupsPage() {
     }
   };
 
+  const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          setPendingFile(file);
+        }
+        break;
+      }
+    }
+  };
+
   const handleSend = async (e: FormEvent) => {
     e.preventDefault();
     if ((!input.trim() && !pendingFile) || sending || !activeGroup) return;
     setSending(true);
     const text = input.trim();
     const file = pendingFile;
+    const replyToId = replyingTo?._id;
     setInput('');
     setPendingFile(null);
+    setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     try {
       let data;
@@ -171,14 +224,28 @@ export default function ChatGroupsPage() {
         const fd = new FormData();
         fd.append('file', file);
         if (text) fd.append('content', text);
+        if (replyToId) fd.append('replyTo', replyToId);
         data = await apiUpload('POST', `/groups/${activeGroup._id}/messages`, fd);
       } else {
-        data = await api.post(`/groups/${activeGroup._id}/messages`, { content: text });
+        data = await api.post(`/groups/${activeGroup._id}/messages`, { content: text, replyTo: replyToId });
       }
       setMessages(prev => [...prev, data.message]);
     } catch {} finally {
       setSending(false);
     }
+  };
+
+  const handleReact = async (messageId: string, type: string) => {
+    if (!activeGroup) return;
+    const msg = messages.find(m => m._id === messageId);
+    const isSame = (msg?.reactions ?? []).find(r => r.user === user?.id)?.type === type;
+    setMessages(prev => prev.map(m => {
+      if (m._id !== messageId) return m;
+      const withoutMine = (m.reactions ?? []).filter(r => r.user !== user?.id);
+      return { ...m, reactions: isSame ? withoutMine : [...withoutMine, { user: user!.id, type }] };
+    }));
+    const data = await api.post(`/groups/${activeGroup._id}/messages/${messageId}/react`, { type });
+    setMessages(prev => prev.map(m => (m._id === messageId ? { ...m, reactions: data.reactions } : m)));
   };
 
   const handleLeaveOrDelete = async () => {
@@ -398,6 +465,11 @@ export default function ChatGroupsPage() {
               )}
               {messages.map(m => {
                 const mine = m.sender._id === user?.id;
+                const userReaction = (m.reactions ?? []).find(r => r.user === user?.id)?.type ?? null;
+                const reactionCounts = (m.reactions ?? []).reduce<Record<string, number>>((acc, r) => {
+                  acc[r.type] = (acc[r.type] ?? 0) + 1;
+                  return acc;
+                }, {});
                 return (
                   <div key={m._id} className={`cg-bubble-row ${mine ? 'mine' : 'theirs'}`}>
                     {!mine && (
@@ -408,10 +480,33 @@ export default function ChatGroupsPage() {
                     <div className="cg-bubble-wrap">
                       {!mine && <span className="cg-bubble-sender">{m.sender.username}</span>}
                       <div className={`cg-bubble ${mine ? 'mine' : 'theirs'}`}>
+                        {m.replyTo && (
+                          <div className="cg-bubble-quote">
+                            <span className="cg-bubble-quote-sender">{m.replyTo.sender.username}</span>
+                            <span className="cg-bubble-quote-text">{m.replyTo.content || '📎 Attachment'}</span>
+                          </div>
+                        )}
                         {m.attachment && <AttachmentView attachment={m.attachment} mine={mine} />}
-                        {m.content && <span>{m.content}</span>}
+                        {m.content && <MessageContent content={m.content} />}
                       </div>
-                      <span className="cg-bubble-time">{timeLabel(m.createdAt)}</span>
+                      {Object.keys(reactionCounts).length > 0 && (
+                        <div className="cg-bubble-reactions">
+                          {Object.entries(reactionCounts).map(([type, count]) => (
+                            <span key={type} className="cg-bubble-reaction-chip">{EMOJI[type]} {count}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="cg-bubble-footer">
+                        <span className="cg-bubble-time">{timeLabel(m.createdAt)}</span>
+                        <div className="cg-bubble-actions">
+                          <ReactionPicker
+                            userReaction={userReaction}
+                            onReact={(type) => handleReact(m._id, type)}
+                            compact
+                          />
+                          <button type="button" className="cg-reply-btn" onClick={() => setReplyingTo(m)}>↩ Reply</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -419,6 +514,15 @@ export default function ChatGroupsPage() {
               <div ref={bottomRef} />
             </div>
 
+            {replyingTo && (
+              <div className="cg-reply-preview">
+                <div className="cg-reply-preview-info">
+                  <span className="cg-reply-preview-label">Replying to {replyingTo.sender._id === user?.id ? 'yourself' : replyingTo.sender.username}</span>
+                  <span className="cg-reply-preview-text">{replyingTo.content || '📎 Attachment'}</span>
+                </div>
+                <button type="button" className="cg-reply-preview-cancel" onClick={() => setReplyingTo(null)}>✕</button>
+              </div>
+            )}
             <form className="cg-input-bar" onSubmit={handleSend}>
               <input
                 ref={fileInputRef}
@@ -437,9 +541,10 @@ export default function ChatGroupsPage() {
                 )}
                 <input
                   className="cg-input"
-                  placeholder={pendingFile ? 'Add a caption… (optional)' : 'Message the group…'}
+                  placeholder={pendingFile ? 'Add a caption… (optional)' : 'Message the group… (paste a screenshot to attach it)'}
                   value={input}
                   onChange={e => setInput(e.target.value)}
+                  onPaste={handlePaste}
                   maxLength={2000}
                 />
               </div>

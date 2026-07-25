@@ -70,6 +70,11 @@
   font-size: 11px; color: var(--text-dim);
 }
 
+.sb-ai-badge {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .sb-see-all {
   width: 100%;
   padding: 11px 14px;
@@ -81,6 +86,69 @@
 }
 .sb-see-all:hover { background: rgba(0,201,177,0.07); }
 
+.sb-mobile-toggle { display: none; }
+.sb-mobile-close  { display: none; }
+
 @media (max-width: 768px) {
-  .sb-wrap { display: none; }
+  .sb-wrap {
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .sb-wrap .search-input { display: none; }
+
+  .sb-mobile-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    font-size: 16px;
+    color: var(--text-dim);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+  }
+
+  /* Expanded: covers the topbar as a full-width overlay bar so there's
+     room to actually type, instead of squeezing an input into the
+     regular topbar row. */
+  .sb-wrap--mobile-expanded {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    height: var(--header-h);
+    padding: 0 14px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sb-wrap--mobile-expanded .sb-mobile-toggle { display: none; }
+
+  .sb-wrap--mobile-expanded .search-input {
+    display: block;
+    width: 100%;
+  }
+
+  .sb-wrap--mobile-expanded .sb-mobile-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .sb-wrap--mobile-expanded .sb-dropdown {
+    top: calc(var(--header-h) + 8px);
+    left: 14px;
+    right: 14px;
+  }
 }

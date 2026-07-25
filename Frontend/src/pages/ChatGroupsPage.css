@@ -377,11 +377,101 @@
 .cg-bubble.mine   { background: var(--accent); color: #000; border-bottom-right-radius: 4px; }
 .cg-bubble.theirs { background: var(--bg-secondary); color: var(--text-primary); border-bottom-left-radius: 4px; }
 
+.cg-bubble-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 3px solid rgba(0,0,0,0.25);
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.08);
+  font-size: 12px;
+}
+.cg-bubble.theirs .cg-bubble-quote { border-left-color: var(--accent); background: var(--bg-hover); }
+.cg-bubble-quote-sender { font-weight: 700; }
+.cg-bubble-quote-text {
+  opacity: 0.8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+}
+
+.cg-bubble-reactions { display: flex; gap: 4px; padding: 0 4px; }
+.cg-bubble-reaction-chip {
+  font-size: 11px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 6px;
+}
+
+.cg-bubble-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cg-bubble-row.mine .cg-bubble-footer { flex-direction: row-reverse; }
 .cg-bubble-time {
   font-size: 10px;
   color: var(--text-dim);
   padding: 0 4px;
 }
+
+.cg-bubble-line { display: block; }
+.cg-consensus-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  background: rgba(0,0,0,0.12);
+  color: inherit;
+  transition: filter 0.15s;
+}
+.cg-bubble.theirs .cg-consensus-link { background: var(--bg-hover); color: var(--accent); }
+.cg-consensus-link:hover { filter: brightness(1.1); }
+
+.cg-bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cg-reply-btn {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border-radius: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* On touch devices the action row stays visible (no hover to depend on).
+   On real pointer devices, reveal it on hover only, to keep bubbles clean. */
+@media (hover: hover) and (pointer: fine) {
+  .cg-bubble-actions { opacity: 0; transition: opacity 0.15s; }
+  .cg-bubble-row:hover .cg-bubble-actions { opacity: 1; }
+  .cg-reply-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+}
+
+/* Reply-preview strip above the compose bar */
+.cg-reply-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.cg-reply-preview-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cg-reply-preview-label { font-size: 11px; font-weight: 700; color: var(--accent); }
+.cg-reply-preview-text {
+  font-size: 12px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cg-reply-preview-cancel { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.cg-reply-preview-cancel:hover { color: var(--red); }
 
 .cg-input-bar {
   display: flex;

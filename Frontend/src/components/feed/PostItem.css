@@ -26,6 +26,13 @@
 .pi-title   { font-size: 16px; font-weight: 700; margin-bottom: 8px; line-height: 1.4; }
 .pi-content { font-size: 14px; line-height: 1.65; color: var(--text-muted); white-space: pre-wrap; }
 
+.pi-hashtag {
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.pi-hashtag:hover { text-decoration: underline; }
+
 /* Reaction summary chips */
 .pi-reaction-summary {
   display: flex; flex-wrap: wrap; gap: 6px;
@@ -174,8 +181,29 @@
   border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700; color: #000;
 }
+.pi-comment-file-input { display: none; }
+.pi-comment-attach-btn {
+  width: 30px; height: 30px; flex-shrink: 0;
+  font-size: 15px; color: var(--text-dim);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.pi-comment-attach-btn:hover { background: var(--bg-hover); color: var(--accent); }
+
+.pi-comment-input-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.pi-comment-file-preview {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(0,201,177,0.08);
+  border: 1px solid rgba(0,201,177,0.25);
+  border-radius: 8px; padding: 4px 10px; font-size: 12px;
+}
+.pi-comment-file-preview-name   { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+.pi-comment-file-preview-remove { color: var(--text-dim); font-size: 11px; flex-shrink: 0; }
+.pi-comment-file-preview-remove:hover { color: var(--red); }
+
 .pi-comment-input {
-  flex: 1; background: var(--bg-primary); border: 1px solid var(--border);
+  width: 100%; background: var(--bg-primary); border: 1px solid var(--border);
   border-radius: 20px; padding: 7px 14px; font-size: 13px; color: var(--text-primary);
   outline: none; transition: border-color 0.15s;
 }
