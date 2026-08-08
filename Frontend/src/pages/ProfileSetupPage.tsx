@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import AvatarCropModal from '../components/AvatarCropModal';
 import './ProfileSetupPage.css';
 
 const ROLES = [
@@ -61,6 +62,7 @@ export default function ProfileSetupPage() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarFile,   setAvatarFile]   = useState<File | null>(null);
   const [avatarPreview,setAvatarPreview]= useState('');
+  const [cropSrc, setCropSrc] = useState('');
 
   const [investingSince, setInvestingSince] = useState<number>(currentYear - 5);
   const [role,           setRole]           = useState('');
@@ -89,12 +91,29 @@ export default function ProfileSetupPage() {
     setBio(generateBio(role, strategy, aum, investingSince));
   };
 
+  const MAX_RAW_UPLOAD_BYTES = 20 * 1024 * 1024;
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+    // Let the same file be re-selected later (e.g. after cancelling a crop).
+    e.target.value = '';
+
+    if (file.size > MAX_RAW_UPLOAD_BYTES) {
+      setError('That photo is too large (max 20 MB). Try a smaller file.');
+      return;
+    }
+    setError('');
+    setCropSrc(URL.createObjectURL(file));
   };
+
+  const handleCropSave = (croppedFile: File) => {
+    setAvatarFile(croppedFile);
+    setAvatarPreview(URL.createObjectURL(croppedFile));
+    setCropSrc('');
+  };
+
+  const handleCropCancel = () => setCropSrc('');
 
   const handleSubmit = async () => {
     if (!role || !strategy || !aum) { setError('Please fill in all fields'); return; }
@@ -281,6 +300,10 @@ export default function ProfileSetupPage() {
           {submitting ? 'Saving…' : 'Enter AlphaCircle →'}
         </button>
       </div>
+
+      {cropSrc && (
+        <AvatarCropModal imageSrc={cropSrc} onSave={handleCropSave} onCancel={handleCropCancel} />
+      )}
     </div>
   );
 }

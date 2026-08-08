@@ -4,8 +4,14 @@ import { useAuth } from "../contexts/AuthContext";
 import { useMessageNotifications } from "../contexts/MessageNotificationsContext";
 import { api, apiUpload } from "../api";
 import ReactionPicker from "../components/feed/ReactionPicker";
+import UserAvatar from "../components/UserAvatar";
 import { EMOJI } from "../components/feed/reactions";
 import { extractConsensusLinkId } from "../utils/consensusLink";
+import {
+  importPublicKey, generateSessionKeyForRecipients, unwrapSessionKey,
+  encryptContentWithKey, decryptContentWithKey, encryptFileWithKey, decryptFileWithKey,
+  b64ToBuf, bufToB64,
+} from "../utils/crypto";
 import "./MessagesPage.css";
 
 function MessageContent({ content }: { content: string }) {
@@ -29,12 +35,17 @@ function MessageContent({ content }: { content: string }) {
 interface OtherUser {
   _id: string;
   username: string;
+  avatar?: string;
 }
 
 interface Conversation {
   conversationId: string;
   otherUser: OtherUser;
   content: string;
+  encrypted?: boolean;
+  cipherText?: string;
+  iv?: string;
+  encryptedKeys?: Record<string, string>;
   attachment?: { originalname: string };
   sender: string;
   createdAt: string;
@@ -43,16 +54,28 @@ interface Conversation {
 
 interface Attachment { filename: string; originalname: string; mimetype: string; size: number; }
 interface Reaction { user: string; type: string; }
-interface ReplyPreview { _id: string; content: string; sender: { _id: string; username: string }; }
+interface ReplyPreview {
+  _id: string; content: string; sender: { _id: string; username: string };
+  encrypted?: boolean; cipherText?: string; iv?: string; encryptedKeys?: Record<string, string>;
+}
 interface Message {
   _id: string;
-  sender: { _id: string; username: string };
-  recipient: { _id: string; username: string };
+  sender: { _id: string; username: string; avatar?: string };
+  recipient: { _id: string; username: string; avatar?: string };
   content: string;
   attachment?: Attachment;
+  encrypted?: boolean;
+  cipherText?: string;
+  iv?: string;
+  encryptedKeys?: Record<string, string>;
+  encryptedAttachment?: { filename: string; size: number; iv: string; encryptedMeta: string; encryptedMetaIv: string };
   reactions: Reaction[];
   replyTo?: ReplyPreview | null;
   createdAt: string;
+  // client-only, filled in after decryption
+  decryptedAttachmentUrl?: string;
+  decryptedAttachmentName?: string;
+  decryptedAttachmentMimetype?: string;
 }
 
 function formatBytes(n: number) {
@@ -61,22 +84,22 @@ function formatBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function AttachmentView({ attachment, mine }: { attachment: Attachment; mine: boolean }) {
-  const url = `/uploads/${attachment.filename}`;
-  if (attachment.mimetype.startsWith("image/")) {
+interface AttachmentViewProps { url: string; name: string; mimetype: string; size: number; mine: boolean; }
+function AttachmentView({ url, name, mimetype, size, mine }: AttachmentViewProps) {
+  if (mimetype.startsWith("image/")) {
     return (
       <a href={url} target="_blank" rel="noreferrer" className="mp-att-img-link">
-        <img src={url} alt={attachment.originalname} className="mp-att-img" />
+        <img src={url} alt={name} className="mp-att-img" />
       </a>
     );
   }
-  const ext = attachment.originalname.split(".").pop()?.toUpperCase() ?? "FILE";
+  const ext = name.split(".").pop()?.toUpperCase() ?? "FILE";
   return (
-    <a href={url} download={attachment.originalname} className={`mp-att-doc ${mine ? "mine" : "theirs"}`}>
+    <a href={url} download={name} className={`mp-att-doc ${mine ? "mine" : "theirs"}`}>
       <span className="mp-att-doc-icon">📄</span>
       <div className="mp-att-doc-info">
-        <span className="mp-att-doc-name">{attachment.originalname}</span>
-        <span className="mp-att-doc-meta">{ext} · {formatBytes(attachment.size)}</span>
+        <span className="mp-att-doc-name">{name}</span>
+        <span className="mp-att-doc-meta">{ext} · {formatBytes(size)}</span>
       </div>
       <span className="mp-att-doc-dl">↓</span>
     </a>
@@ -96,7 +119,7 @@ export default function MessagesPage() {
   const { userId: activeUserId } = useParams<{ userId?: string }>();
   console.log(activeUserId);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, privateKey } = useAuth();
   const { socket, markRead } = useMessageNotifications();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -114,26 +137,98 @@ export default function MessagesPage() {
   const dragCounterRef = useRef(0);
   const activeUserIdRef = useRef(activeUserId);
 
+  // Decrypts a single message (and its reply-quote, and any attachment) in
+  // place. Never touches the server — everything here runs in the browser.
+  const decryptMessage = async (msg: Message): Promise<Message> => {
+    let out = msg;
+
+    if (msg.replyTo?.encrypted && privateKey && user?.id) {
+      try {
+        const wrapped = msg.replyTo.encryptedKeys![user.id];
+        const replyKey = await unwrapSessionKey(wrapped, privateKey);
+        const decryptedReplyContent = await decryptContentWithKey(msg.replyTo.cipherText!, msg.replyTo.iv!, replyKey);
+        out = { ...out, replyTo: { ...msg.replyTo, content: decryptedReplyContent } };
+      } catch {
+        out = { ...out, replyTo: { ...msg.replyTo, content: "🔒 Unable to decrypt" } };
+      }
+    }
+
+    if (!msg.encrypted) return out;
+    if (!privateKey || !user?.id) return { ...out, content: "🔒 Locked — log in again to unlock" };
+
+    try {
+      // Unwrap the session key ONCE — the same key encrypted both the text
+      // and any attachment, so it's reused for both rather than re-derived.
+      const wrappedKey = msg.encryptedKeys![user.id];
+      const sessionKey = await unwrapSessionKey(wrappedKey, privateKey);
+      const content = await decryptContentWithKey(msg.cipherText!, msg.iv!, sessionKey);
+      out = { ...out, content };
+
+      if (msg.encryptedAttachment) {
+        try {
+          const res = await fetch(`/uploads/${msg.encryptedAttachment.filename}`);
+          const ciphertextBuf = await res.arrayBuffer();
+          const { blob, name, mimetype } = await decryptFileWithKey({
+            ciphertext: bufToB64(ciphertextBuf),
+            iv: msg.encryptedAttachment.iv,
+            meta: msg.encryptedAttachment.encryptedMeta,
+            metaIv: msg.encryptedAttachment.encryptedMetaIv,
+          }, sessionKey);
+          out = {
+            ...out,
+            decryptedAttachmentUrl: URL.createObjectURL(blob),
+            decryptedAttachmentName: name,
+            decryptedAttachmentMimetype: mimetype,
+          };
+        } catch (err) {
+          console.error("Attachment decrypt failed:", err);
+        }
+      }
+    } catch (err) {
+      console.error("Message decrypt failed:", err);
+      out = { ...out, content: "🔒 Unable to decrypt this message" };
+    }
+    return out;
+  };
+
+  const decryptMessages = (msgs: Message[]) => Promise.all(msgs.map(decryptMessage));
+
   useEffect(() => {
     activeUserIdRef.current = activeUserId;
   }, [activeUserId]);
+
+  // Decrypts a conversation-list preview (the last message shown per row) —
+  // same session-key mechanism as full messages, just applied to one line.
+  const decryptConversationPreview = async (c: Conversation): Promise<Conversation> => {
+    if (!c.encrypted) return c;
+    if (!privateKey || !user?.id) return { ...c, content: "🔒 Encrypted message" };
+    try {
+      const wrappedKey = c.encryptedKeys?.[user.id];
+      if (!wrappedKey) return { ...c, content: "🔒 Encrypted message" };
+      const sessionKey = await unwrapSessionKey(wrappedKey, privateKey);
+      const content = await decryptContentWithKey(c.cipherText!, c.iv!, sessionKey);
+      return { ...c, content };
+    } catch {
+      return { ...c, content: "🔒 Encrypted message" };
+    }
+  };
 
   // Load conversation list
   const loadConversations = () => {
     api
       .get("/messages/conversations")
-      .then((d) => setConversations(d.conversations));
+      .then(async (d) => setConversations(await Promise.all(d.conversations.map(decryptConversationPreview))));
   };
 
   useEffect(() => {
     loadConversations();
-  }, []);
+  }, [privateKey]);
 
   // Attach listeners to the shared notifications socket
   useEffect(() => {
     if (!socket) return;
 
-    const onMessage = (msg: Message) => {
+    const onMessage = async (msg: Message) => {
       const myId = user?.id;
       const otherId =
         msg.sender._id === myId ? msg.recipient._id : msg.sender._id;
@@ -144,7 +239,8 @@ export default function MessagesPage() {
         otherId === activeUserIdRef.current ||
         msg.sender._id === activeUserIdRef.current
       ) {
-        setMessages((prev) => [...prev, msg]);
+        const decrypted = await decryptMessage(msg);
+        setMessages((prev) => [...prev, decrypted]);
         markRead(otherId);
       }
 
@@ -163,7 +259,7 @@ export default function MessagesPage() {
       socket.off("new_message", onMessage);
       socket.off("message_reaction", onReaction);
     };
-  }, [socket, user?.id, markRead]);
+  }, [socket, user?.id, markRead, privateKey]);
 
   // Load messages when active user changes
   useEffect(() => {
@@ -176,8 +272,8 @@ export default function MessagesPage() {
     setLoadingMsgs(true);
     api
       .get(`/messages/${activeUserId}`)
-      .then((d) => {
-        setMessages(d.messages);
+      .then(async (d) => {
+        setMessages(await decryptMessages(d.messages));
         setOtherUser(d.otherUser);
         // The server just marked these as read — reflect that immediately
         // instead of waiting for a remount to notice.
@@ -187,7 +283,7 @@ export default function MessagesPage() {
         ));
       })
       .finally(() => setLoadingMsgs(false));
-  }, [activeUserId, markRead]);
+  }, [activeUserId, markRead, privateKey]);
 
   // Scroll to bottom when messages load/arrive
   useEffect(() => {
@@ -221,8 +317,48 @@ export default function MessagesPage() {
     setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     try {
+      // Encrypt if both sides have keys set up; otherwise fall back to plain
+      // text exactly as before (e.g. the other person hasn't set up encryption yet).
+      let recipients: { userId: string; publicKey: CryptoKey }[] | null = null;
+      if (privateKey && user?.id) {
+        try {
+          const { keys } = await api.post("/users/public-keys", { userIds: [user.id, activeUserId] });
+          if (keys[user.id] && keys[activeUserId]) {
+            recipients = [
+              { userId: user.id, publicKey: await importPublicKey(keys[user.id]) },
+              { userId: activeUserId, publicKey: await importPublicKey(keys[activeUserId]) },
+            ];
+          }
+        } catch { /* fall back to plaintext below */ }
+      }
+
       let data;
-      if (file) {
+      if (recipients) {
+        // One shared session key encrypts BOTH the text and the attachment
+        // (if any) — the same wrapped keys unlock both, avoiding the two
+        // independent keys the very first version of this had a bug with.
+        const { sessionKey, keys } = await generateSessionKeyForRecipients(recipients);
+        const { ciphertext, iv } = await encryptContentWithKey(text, sessionKey);
+        if (file) {
+          const fileEnvelope = await encryptFileWithKey(file, sessionKey);
+          const fd = new FormData();
+          fd.append("file", new Blob([b64ToBuf(fileEnvelope.ciphertext)]), "encrypted.bin");
+          fd.append("encrypted", "true");
+          fd.append("cipherText", ciphertext);
+          fd.append("iv", iv);
+          fd.append("encryptedKeys", JSON.stringify(keys));
+          fd.append("encryptedAttachmentIv", fileEnvelope.iv);
+          fd.append("encryptedAttachmentMeta", fileEnvelope.meta);
+          fd.append("encryptedAttachmentMetaIv", fileEnvelope.metaIv);
+          if (replyToId) fd.append("replyTo", replyToId);
+          data = await apiUpload("POST", `/messages/${activeUserId}`, fd);
+        } else {
+          data = await api.post(`/messages/${activeUserId}`, {
+            encrypted: true, cipherText: ciphertext, iv,
+            encryptedKeys: JSON.stringify(keys), replyTo: replyToId,
+          });
+        }
+      } else if (file) {
         const fd = new FormData();
         fd.append("file", file);
         if (text) fd.append("content", text);
@@ -231,7 +367,9 @@ export default function MessagesPage() {
       } else {
         data = await api.post(`/messages/${activeUserId}`, { content: text, replyTo: replyToId });
       }
-      setMessages((prev) => [...prev, data.message]);
+
+      const decorated = await decryptMessage(data.message);
+      setMessages((prev) => [...prev, decorated]);
       loadConversations();
     } finally {
       setSending(false);
@@ -270,9 +408,11 @@ export default function MessagesPage() {
             className={`mp-conv ${activeUserId === c.otherUser._id ? "active" : ""}`}
             onClick={() => navigate(`/messages/${c.otherUser._id}`)}
           >
-            <div className="mp-conv-avatar">
-              {c.otherUser.username.slice(0, 2).toUpperCase()}
-            </div>
+            <UserAvatar
+              username={c.otherUser.username}
+              avatar={c.otherUser.avatar}
+              size={44}
+            />
             <div className="mp-conv-info">
               <div className="mp-conv-top">
                 <span className="mp-conv-name">{c.otherUser.username}</span>
@@ -333,9 +473,11 @@ export default function MessagesPage() {
               >
                 ←
               </button>
-              <div className="mp-chat-avatar">
-                {otherUser?.username.slice(0, 2).toUpperCase()}
-              </div>
+              <UserAvatar
+                username={otherUser?.username ?? ''}
+                avatar={otherUser?.avatar}
+                size={36}
+              />
               <span className="mp-chat-name">{otherUser?.username}</span>
             </div>
 
@@ -360,9 +502,11 @@ export default function MessagesPage() {
                     className={`mp-bubble-row ${mine ? "mine" : "theirs"}`}
                   >
                     {!mine && (
-                      <div className="mp-bubble-avatar">
-                        {m.sender.username.slice(0, 2).toUpperCase()}
-                      </div>
+                      <UserAvatar
+                        username={m.sender.username}
+                        avatar={m.sender.avatar}
+                        size={28}
+                      />
                     )}
                     <div className="mp-bubble-wrap">
                       <div className={`mp-bubble ${mine ? "mine" : "theirs"}`}>
@@ -372,7 +516,22 @@ export default function MessagesPage() {
                             <span className="mp-bubble-quote-text">{m.replyTo.content || "📎 Attachment"}</span>
                           </div>
                         )}
-                        {m.attachment && <AttachmentView attachment={m.attachment} mine={mine} />}
+                        {m.attachment && (
+                          <AttachmentView url={`/uploads/${m.attachment.filename}`} name={m.attachment.originalname} mimetype={m.attachment.mimetype} size={m.attachment.size} mine={mine} />
+                        )}
+                        {m.encryptedAttachment && (
+                          m.decryptedAttachmentUrl ? (
+                            <AttachmentView
+                              url={m.decryptedAttachmentUrl}
+                              name={m.decryptedAttachmentName ?? "file"}
+                              mimetype={m.decryptedAttachmentMimetype ?? "application/octet-stream"}
+                              size={m.encryptedAttachment.size}
+                              mine={mine}
+                            />
+                          ) : (
+                            <div className="mp-att-decrypting">🔒 Decrypting attachment…</div>
+                          )
+                        )}
                         {m.content && <MessageContent content={m.content} />}
                       </div>
                       {Object.keys(reactionCounts).length > 0 && (

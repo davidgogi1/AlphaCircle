@@ -1,6 +1,7 @@
 import { useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
 import ReactionPicker from './ReactionPicker';
 import AttachmentBadge from './AttachmentBadge';
+import UserAvatar from '../UserAvatar';
 import { EMOJI } from './reactions';
 import './CommentThread.css';
 
@@ -14,7 +15,7 @@ export interface CommentAttachment {
 export interface CommentNode {
   _id: string;
   content: string;
-  author: { _id: string; username: string };
+  author: { _id: string; username: string; avatar?: string };
   createdAt: string;
   parent: string | null;
   reactions?: { user: string; type: string }[];
@@ -52,12 +53,13 @@ interface ItemProps {
   postAuthorId:     string;
   currentUserId:    string | undefined;
   currentUsername:  string | undefined;
+  currentUserAvatar?: string;
   onReply:          (parentId: string, content: string, file?: File) => Promise<void>;
   onDelete:         (commentId: string) => void;
   onReactToComment: (commentId: string, type: string) => Promise<void>;
 }
 
-function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername, onReply, onDelete, onReactToComment }: ItemProps) {
+function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername, currentUserAvatar, onReply, onDelete, onReactToComment }: ItemProps) {
   const [showReply,     setShowReply]     = useState(false);
   const [replyContent,  setReplyContent]  = useState('');
   const [replyFile,     setReplyFile]     = useState<File | null>(null);
@@ -66,8 +68,6 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
   const replyFileInputRef = useRef<HTMLInputElement>(null);
 
   const canDelete  = currentUserId === node.author._id || currentUserId === postAuthorId;
-  const initials   = node.author.username.slice(0, 2).toUpperCase();
-  const selfInit   = (currentUsername ?? '?').slice(0, 2).toUpperCase();
 
   const reactions     = node.reactions ?? [];
   const userReaction  = reactions.find(r => r.user === currentUserId)?.type ?? null;
@@ -110,7 +110,7 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
       {depth > 0 && <div className="ct-line" />}
       <div className="ct-body">
         <div className="ct-header">
-          <div className="ct-avatar">{initials}</div>
+          <UserAvatar username={node.author.username} avatar={node.author.avatar} size={28} />
           <div className="ct-meta">
             <span className="ct-username">{node.author.username}</span>
             <span className="ct-time">{timeAgo(node.createdAt)}</span>
@@ -158,7 +158,7 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
         {showReply && (
           <form className="ct-reply-form" onSubmit={handleReply}>
             <div className="ct-reply-row">
-              <div className="ct-self-avatar">{selfInit}</div>
+              <UserAvatar username={currentUsername ?? '?'} avatar={currentUserAvatar} size={26} />
               <input
                 ref={replyFileInputRef}
                 type="file"
@@ -199,6 +199,7 @@ function CommentItem({ node, depth, postAuthorId, currentUserId, currentUsername
             postAuthorId={postAuthorId}
             currentUserId={currentUserId}
             currentUsername={currentUsername}
+            currentUserAvatar={currentUserAvatar}
             onReply={onReply}
             onDelete={onDelete}
             onReactToComment={onReactToComment}
@@ -215,12 +216,13 @@ interface ThreadProps {
   postAuthorId:      string;
   currentUserId:     string | undefined;
   currentUsername:   string | undefined;
+  currentUserAvatar?: string;
   onReply:           (parentId: string, content: string, file?: File) => Promise<void>;
   onDelete:          (commentId: string) => void;
   onReactToComment:  (commentId: string, type: string) => Promise<void>;
 }
 
-export default function CommentThread({ nodes, depth, postAuthorId, currentUserId, currentUsername, onReply, onDelete, onReactToComment }: ThreadProps) {
+export default function CommentThread({ nodes, depth, postAuthorId, currentUserId, currentUsername, currentUserAvatar, onReply, onDelete, onReactToComment }: ThreadProps) {
   return (
     <div className="ct-thread">
       {nodes.map(node => (
@@ -231,6 +233,7 @@ export default function CommentThread({ nodes, depth, postAuthorId, currentUserI
           postAuthorId={postAuthorId}
           currentUserId={currentUserId}
           currentUsername={currentUsername}
+          currentUserAvatar={currentUserAvatar}
           onReply={onReply}
           onDelete={onDelete}
           onReactToComment={onReactToComment}

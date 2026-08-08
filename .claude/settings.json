@@ -2,7 +2,29 @@
   "permissions": {
     "allow": [
       "Write",
-      "Edit"
+      "Edit",
+      "Bash(npx tsc *)",
+      "Bash(pm2 list)",
+      "Bash(pm2 logs *)",
+      "Bash(npm audit)",
+      "Bash(npm ls *)",
+      "Bash(aws s3 ls *)",
+      "Bash(aws s3api list-objects-v2 *)",
+      "Bash(aws sts get-caller-identity)",
+      "Bash(sudo systemctl status *)",
+      "Bash(systemctl is-active *)",
+      "Bash(systemctl list-unit-files)",
+      "Bash(sudo journalctl *)",
+      "Bash(crontab -l)",
+      "Bash(nvm use *)",
+      "Bash(nvm ls*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(export NVM_DIR=\"$HOME/.nvm\")",
+      "Bash(. \"$NVM_DIR/nvm.sh\")",
+      "Bash(bash deploy-backend.sh)",
+      "Bash(bash deploy-frontend.sh)",
+      "Bash(./deploy-backend.sh)",
+      "Bash(./deploy-frontend.sh)"
     ]
   }
 }

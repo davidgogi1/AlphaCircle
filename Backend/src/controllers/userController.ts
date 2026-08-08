@@ -3,6 +3,26 @@ import mongoose from "mongoose";
 import User from "../models/User";
 import Post from "../models/Post";
 
+// POST /api/users/public-keys — bulk lookup, used to encrypt a message for
+// every recipient (a DM's other party, or every current member of a group).
+export const getPublicKeys = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userIds } = req.body as { userIds: string[] };
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400).json({ message: 'userIds array is required' }); return;
+    }
+    const users = await User.find({ _id: { $in: userIds }, encryptionSetUp: true })
+      .select('publicKey')
+      .lean();
+
+    const keys: Record<string, string> = {};
+    for (const u of users) keys[u._id.toString()] = u.publicKey;
+    res.json({ keys });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
   try {
     const me = await User.findById(req.userId).select("following").lean();
@@ -49,7 +69,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
     const followingCount = target.following?.length ?? 0;
 
     const posts = await Post.find({ author: req.params.id })
-      .populate('author', 'username')
+      .populate('author', 'username avatar')
       .sort({ createdAt: -1 })
       .limit(20)
       .lean();

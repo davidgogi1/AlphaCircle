@@ -10,8 +10,8 @@ export const getMyGroups = async (req: Request, res: Response): Promise<void> =>
   try {
     const userId = new mongoose.Types.ObjectId(req.userId);
     const groups = await ChatGroup.find({ 'members.user': userId })
-      .populate('creator', 'username')
-      .populate('members.user', 'username')
+      .populate('creator', 'username avatar')
+      .populate('members.user', 'username avatar')
       .lean();
 
     const uid = (m: any) => {
@@ -53,8 +53,8 @@ export const getMyGroups = async (req: Request, res: Response): Promise<void> =>
 
     // Groups where this user has a pending admin transfer offer
     const pendingTransfers = await ChatGroup.find({ pendingAdminTransfer: userId })
-      .populate('creator', 'username')
-      .populate('members.user', 'username')
+      .populate('creator', 'username avatar')
+      .populate('members.user', 'username avatar')
       .lean();
 
     res.json({ accepted: acceptedWithUnread, pending, pendingTransfers });
@@ -76,8 +76,8 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
     ];
 
     const group = await ChatGroup.create({ name: name.trim(), creator: req.userId, members });
-    await group.populate('creator', 'username');
-    await group.populate('members.user', 'username');
+    await group.populate('creator', 'username avatar');
+    await group.populate('members.user', 'username avatar');
 
     const io = getIO();
     for (const id of invitees) {
@@ -94,8 +94,8 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
 export const getGroup = async (req: Request, res: Response): Promise<void> => {
   try {
     const group = await ChatGroup.findById(req.params.id)
-      .populate('creator', 'username')
-      .populate('members.user', 'username')
+      .populate('creator', 'username avatar')
+      .populate('members.user', 'username avatar')
       .lean();
     if (!group) { res.status(404).json({ message: 'Group not found' }); return; }
 
@@ -182,8 +182,12 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
     if (!isMember) { res.status(403).json({ message: 'Not a member' }); return; }
 
     const messages = await ChatGroupMessage.find({ group: req.params.id })
-      .populate('sender', 'username')
-      .populate({ path: 'replyTo', select: 'content sender', populate: { path: 'sender', select: 'username' } })
+      .populate('sender', 'username avatar')
+      .populate({
+        path: 'replyTo',
+        select: 'content encrypted cipherText iv encryptedKeys sender',
+        populate: { path: 'sender', select: 'username avatar' },
+      })
       .sort({ createdAt: 1 })
       .lean();
 
@@ -196,10 +200,10 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
 // POST /api/groups/:id/messages
 export const sendGroupMessage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const content = (req.body.content ?? '').trim();
-    const file    = req.file;
-    const replyTo = req.body.replyTo;
-    if (!content && !file) { res.status(400).json({ message: 'Content or file required' }); return; }
+    const content   = (req.body.content ?? '').trim();
+    const file      = req.file;
+    const replyTo   = req.body.replyTo;
+    const encrypted = req.body.encrypted === 'true' || req.body.encrypted === true;
 
     const group = await ChatGroup.findById(req.params.id).lean();
     if (!group) { res.status(404).json({ message: 'Not found' }); return; }
@@ -214,22 +218,40 @@ export const sendGroupMessage = async (req: Request, res: Response): Promise<voi
       if (!parent) { res.status(400).json({ message: 'Invalid reply target' }); return; }
     }
 
-    const attachment = file ? {
-      filename:     file.filename,
-      originalname: file.originalname,
-      mimetype:     file.mimetype,
-      size:         file.size,
-    } : undefined;
+    let doc: Record<string, unknown> = { group: req.params.id, sender: req.userId, replyTo: replyTo || null };
 
-    const msg = await ChatGroupMessage.create({
-      group:   req.params.id,
-      sender:  req.userId,
-      content,
-      replyTo: replyTo || null,
-      ...(attachment ? { attachment } : {}),
+    if (encrypted) {
+      const { cipherText, iv, encryptedKeys } = req.body;
+      if (!cipherText || !iv || !encryptedKeys) {
+        res.status(400).json({ message: 'Encrypted content, iv, and keys are required' }); return;
+      }
+      doc = { ...doc, encrypted: true, cipherText, iv, encryptedKeys: JSON.parse(encryptedKeys) };
+
+      if (file) {
+        const { encryptedAttachmentIv, encryptedAttachmentMeta, encryptedAttachmentMetaIv } = req.body;
+        if (!encryptedAttachmentIv || !encryptedAttachmentMeta || !encryptedAttachmentMetaIv) {
+          res.status(400).json({ message: 'Encrypted attachment metadata is required' }); return;
+        }
+        doc.encryptedAttachment = {
+          filename: file.filename, size: file.size,
+          iv: encryptedAttachmentIv, encryptedMeta: encryptedAttachmentMeta, encryptedMetaIv: encryptedAttachmentMetaIv,
+        };
+      }
+    } else {
+      if (!content && !file) { res.status(400).json({ message: 'Content or file required' }); return; }
+      doc.content = content;
+      if (file) {
+        doc.attachment = { filename: file.filename, originalname: file.originalname, mimetype: file.mimetype, size: file.size };
+      }
+    }
+
+    const msg = await ChatGroupMessage.create(doc);
+    await msg.populate('sender', 'username avatar');
+    await msg.populate({
+      path: 'replyTo',
+      select: 'content encrypted cipherText iv encryptedKeys sender',
+      populate: { path: 'sender', select: 'username avatar' },
     });
-    await msg.populate('sender', 'username');
-    await msg.populate({ path: 'replyTo', select: 'content sender', populate: { path: 'sender', select: 'username' } });
 
     // Sender has "read" up to now
     await GroupRead.findOneAndUpdate(

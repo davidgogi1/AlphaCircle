@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { uploadFile } from '../middleware/upload';
+import { uploadEncryptedFile } from '../middleware/upload';
 import {
   getMyGroups, createGroup, getGroup,
   respondToInvite, inviteMembers,
@@ -17,7 +17,7 @@ router.get('/:id',                 getGroup);
 router.post('/:id/respond',        respondToInvite);
 router.post('/:id/invite',         inviteMembers);
 router.get('/:id/messages',        getMessages);
-router.post('/:id/messages',       uploadFile.single('file'), sendGroupMessage);
+router.post('/:id/messages',       uploadEncryptedFile.single('file'), sendGroupMessage);
 router.post('/:id/messages/:messageId/react', reactToGroupMessage);
 router.post('/:id/read',           markAsRead);
 router.delete('/:id/members/:userId', removeMember);

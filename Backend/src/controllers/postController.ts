@@ -117,7 +117,7 @@ export const getTrendingPosts = async (_req: Request, res: Response): Promise<vo
   try {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const posts = await Post.find({ createdAt: { $gte: since } })
-      .populate('author', 'username bio')
+      .populate('author', 'username bio avatar')
       .lean();
 
     const scored = posts.map(p => {

@@ -88,6 +88,13 @@ export const createInvite = async (req: Request, res: Response): Promise<void> =
 
 export const validateInvite = async (req: Request, res: Response): Promise<void> => {
   try {
+    // TEMPORARY dev-only bypass — set DISABLE_INVITE_REQUIREMENT=true in .env
+    // to let any invite link (even a made-up one) pass validation while
+    // testing registration. Remove/unset to restore.
+    if (process.env.DISABLE_INVITE_REQUIREMENT === 'true') {
+      res.json({ valid: true, email: '' }); return;
+    }
+
     const invite = await Invite.findOne({ token: req.params.token });
 
     if (!invite || invite.used || invite.expiresAt < new Date()) {

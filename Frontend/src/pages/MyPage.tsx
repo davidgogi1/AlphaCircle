@@ -109,7 +109,17 @@ export default function MyPage() {
             required
           />
           <button className="invite-btn" type="submit" disabled={inviteSending}>
-            {inviteSending ? 'Sending…' : '✉ Send Invite'}
+            {inviteSending ? (
+              'Sending…'
+            ) : (
+              <>
+                <svg className="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m22 6-10 7L2 6" />
+                </svg>
+                Send Invite
+              </>
+            )}
           </button>
         </form>
         {inviteMsg && (

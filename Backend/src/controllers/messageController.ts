@@ -30,7 +30,8 @@ export const getConversations = async (req: Request, res: Response): Promise<voi
       { $lookup: { from: 'users', localField: 'otherId', foreignField: '_id', as: 'otherUser' } },
       { $unwind: '$otherUser' },
       { $project: {
-          conversationId: 1, content: 1, attachment: 1, sender: 1, read: 1, createdAt: 1, unreadCount: 1,
+          conversationId: 1, content: 1, attachment: 1, encrypted: 1, cipherText: 1, iv: 1, encryptedKeys: 1,
+          sender: 1, read: 1, createdAt: 1, unreadCount: 1,
           'otherUser._id': 1, 'otherUser.username': 1,
       }},
       { $sort: { createdAt: -1 } },
@@ -51,9 +52,13 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
     const conversationId = makeConversationId(req.userId!, req.params.userId);
 
     const messages = await Message.find({ conversationId })
-      .populate('sender',    'username')
-      .populate('recipient', 'username')
-      .populate({ path: 'replyTo', select: 'content sender', populate: { path: 'sender', select: 'username' } })
+      .populate('sender',    'username avatar')
+      .populate('recipient', 'username avatar')
+      .populate({
+        path: 'replyTo',
+        select: 'content encrypted cipherText iv encryptedKeys sender',
+        populate: { path: 'sender', select: 'username avatar' },
+      })
       .sort({ createdAt: 1 })
       .lean();
 
@@ -72,10 +77,10 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
 // POST /api/messages/:userId
 export const sendMessage = async (req: Request, res: Response): Promise<void> => {
   try {
-    const content  = (req.body.content ?? '').trim();
-    const file     = req.file;
-    const replyTo  = req.body.replyTo;
-    if (!content && !file) { res.status(400).json({ message: 'Content or file required' }); return; }
+    const content   = (req.body.content ?? '').trim();
+    const file      = req.file;
+    const replyTo   = req.body.replyTo;
+    const encrypted = req.body.encrypted === 'true' || req.body.encrypted === true;
 
     const other = await User.findById(req.params.userId).lean();
     if (!other) { res.status(404).json({ message: 'User not found' }); return; }
@@ -90,25 +95,42 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
       if (!parent) { res.status(400).json({ message: 'Invalid reply target' }); return; }
     }
 
-    const attachment = file ? {
-      filename:     file.filename,
-      originalname: file.originalname,
-      mimetype:     file.mimetype,
-      size:         file.size,
-    } : undefined;
+    let doc: Record<string, unknown> = { conversationId, sender: req.userId, recipient: req.params.userId, replyTo: replyTo || null };
 
-    const message = await Message.create({
-      conversationId,
-      sender:    req.userId,
-      recipient: req.params.userId,
-      content,
-      replyTo: replyTo || null,
-      ...(attachment ? { attachment } : {}),
+    if (encrypted) {
+      const { cipherText, iv, encryptedKeys } = req.body;
+      if (!cipherText || !iv || !encryptedKeys) {
+        res.status(400).json({ message: 'Encrypted content, iv, and keys are required' }); return;
+      }
+      doc = { ...doc, encrypted: true, cipherText, iv, encryptedKeys: JSON.parse(encryptedKeys) };
+
+      if (file) {
+        const { encryptedAttachmentIv, encryptedAttachmentMeta, encryptedAttachmentMetaIv } = req.body;
+        if (!encryptedAttachmentIv || !encryptedAttachmentMeta || !encryptedAttachmentMetaIv) {
+          res.status(400).json({ message: 'Encrypted attachment metadata is required' }); return;
+        }
+        doc.encryptedAttachment = {
+          filename: file.filename, size: file.size,
+          iv: encryptedAttachmentIv, encryptedMeta: encryptedAttachmentMeta, encryptedMetaIv: encryptedAttachmentMetaIv,
+        };
+      }
+    } else {
+      if (!content && !file) { res.status(400).json({ message: 'Content or file required' }); return; }
+      doc.content = content;
+      if (file) {
+        doc.attachment = { filename: file.filename, originalname: file.originalname, mimetype: file.mimetype, size: file.size };
+      }
+    }
+
+    const message = await Message.create(doc);
+
+    await message.populate('sender',    'username avatar');
+    await message.populate('recipient', 'username avatar');
+    await message.populate({
+      path: 'replyTo',
+      select: 'content encrypted cipherText iv encryptedKeys sender',
+      populate: { path: 'sender', select: 'username avatar' },
     });
-
-    await message.populate('sender',    'username');
-    await message.populate('recipient', 'username');
-    await message.populate({ path: 'replyTo', select: 'content sender', populate: { path: 'sender', select: 'username' } });
 
     // Deliver in real-time to recipient
     getIO()?.to(`user:${req.params.userId}`).emit('new_message', message);

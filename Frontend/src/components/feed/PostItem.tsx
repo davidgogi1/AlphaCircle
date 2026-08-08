@@ -440,6 +440,7 @@ export default function PostItem({ post, onUpdate, onDelete }: Props) {
                   postAuthorId={post.author._id}
                   currentUserId={user?.id}
                   currentUsername={user?.username}
+                  currentUserAvatar={user?.avatar}
                   onReply={handleReply}
                   onDelete={handleDeleteComment}
                   onReactToComment={handleCommentReact}

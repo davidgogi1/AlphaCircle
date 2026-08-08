@@ -330,6 +330,7 @@ export default function ThreadPage() {
             postAuthorId={thread.author._id}
             currentUserId={user?.id}
             currentUsername={user?.username}
+            currentUserAvatar={user?.avatar}
             onReply={handleReply}
             onDelete={handleDeleteComment}
             onReactToComment={handleCommentReact}

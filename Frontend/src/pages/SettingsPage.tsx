@@ -3,7 +3,22 @@ import { useAuth } from '../contexts/AuthContext';
 import './SettingsPage.css';
 
 export default function SettingsPage() {
-  const { changePassword } = useAuth();
+  const { changePassword, user, privateKey, regenerateRecovery } = useAuth();
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState('');
+
+  const handleRegenerate = async () => {
+    if (!confirm('This replaces your current recovery phrase — the old one will stop working. Continue?')) return;
+    setRegenerateError('');
+    setRegenerating(true);
+    try {
+      await regenerateRecovery();
+    } catch (err: unknown) {
+      setRegenerateError(err instanceof Error ? err.message : 'Failed to generate a new recovery phrase');
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword]         = useState('');
@@ -99,6 +114,34 @@ export default function SettingsPage() {
             {loading ? 'Updating…' : 'Update Password'}
           </button>
         </form>
+      </div>
+
+      <div className="settings-card">
+        <h3 className="settings-card-title">Encrypted Messages</h3>
+        {user?.encryptionSetUp ? (
+          <>
+            <p className="settings-card-desc">
+              Your messages and group chats are end-to-end encrypted — only you and the people you're talking to can read them.
+              Your recovery phrase is the only way to get them back if you ever forget your password.
+            </p>
+            {regenerateError && <div className="settings-error">{regenerateError}</div>}
+            <button
+              type="button"
+              className="settings-submit settings-submit-secondary"
+              onClick={handleRegenerate}
+              disabled={regenerating || !privateKey}
+            >
+              {regenerating ? 'Generating…' : 'Generate a new recovery phrase'}
+            </button>
+            {!privateKey && (
+              <p className="settings-card-hint">Log out and back in to enable this — your key isn't unlocked in this session.</p>
+            )}
+          </>
+        ) : (
+          <p className="settings-card-desc">
+            Encryption sets up automatically the next time you log in.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -64,3 +64,11 @@ export const uploadFile = multer({
   },
   limits: { fileSize: 20 * 1024 * 1024 },
 });
+
+// End-to-end encrypted attachments arrive as opaque ciphertext bytes — the
+// real file type only exists inside the encrypted payload itself, so
+// server-side mimetype validation doesn't apply here, just a size limit.
+export const uploadEncryptedFile = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+});

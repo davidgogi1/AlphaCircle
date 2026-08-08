@@ -69,6 +69,7 @@ const userPayload = (user: InstanceType<typeof User>) => ({
   aum:             user.aum,
   bio:             user.bio,
   avatar:          user.avatar ?? '',
+  encryptionSetUp: user.encryptionSetUp,
 });
 
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -82,15 +83,22 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ message: 'Password must be at least 6 characters' }); return;
     }
 
-    if (!inviteToken) {
-      res.status(403).json({ message: 'Registration is by invitation only' }); return;
-    }
-    const invite = await Invite.findOne({ token: inviteToken });
-    if (!invite || invite.used || invite.expiresAt < new Date()) {
-      res.status(403).json({ message: 'Invite link is invalid or has expired' }); return;
-    }
-    if (invite.email !== email.toLowerCase()) {
-      res.status(403).json({ message: 'This invite was sent to a different email address' }); return;
+    // TEMPORARY dev-only bypass — set DISABLE_INVITE_REQUIREMENT=true in .env
+    // to allow registering without an invite while testing. Remove/unset to restore.
+    const inviteBypassed = process.env.DISABLE_INVITE_REQUIREMENT === 'true';
+    let invite: InstanceType<typeof Invite> | null = null;
+
+    if (!inviteBypassed) {
+      if (!inviteToken) {
+        res.status(403).json({ message: 'Registration is by invitation only' }); return;
+      }
+      invite = await Invite.findOne({ token: inviteToken });
+      if (!invite || invite.used || invite.expiresAt < new Date()) {
+        res.status(403).json({ message: 'Invite link is invalid or has expired' }); return;
+      }
+      if (invite.email !== email.toLowerCase()) {
+        res.status(403).json({ message: 'This invite was sent to a different email address' }); return;
+      }
     }
 
     const existing = await User.findOne({ $or: [{ email }, { username }] });
@@ -105,8 +113,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const ip   = extractIp(req);
     const user = await User.create({ username, email, password, registrationIp: ip });
 
-    invite.used = true;
-    await invite.save();
+    if (invite) {
+      invite.used = true;
+      await invite.save();
+    }
 
     // Brand-new account — nothing to compare a "new device" against yet, so
     // this first browser is trusted outright rather than immediately challenged.
@@ -177,6 +187,16 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       // from under someone; only genuine inactivity for the full period should.
       setDeviceCookie(req, res, deviceId!);
 
+      const token = signToken(user.id as string);
+      res.json({ token, user: userPayload(user) });
+      return;
+    }
+
+    // TEMPORARY dev-only bypass — set DISABLE_STEP_UP_VERIFICATION=true in
+    // .env to skip the emailed-code requirement entirely while testing.
+    // Remove/unset this env var to restore normal behavior.
+    if (process.env.DISABLE_STEP_UP_VERIFICATION === 'true') {
+      await trustDevice(req, res, user.id as string, ip, userAgent);
       const token = signToken(user.id as string);
       res.json({ token, user: userPayload(user) });
       return;
@@ -313,6 +333,76 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+// POST /api/auth/encryption-setup — one-time, called by the browser after it
+// generates a keypair and wraps the private key under the user's password
+// and a freshly generated recovery phrase. The server never sees the
+// plaintext private key, the password, the recovery phrase, or any derived
+// wrapping key — only the already-encrypted results.
+export const setupEncryption = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      publicKey, passwordSalt, encryptedPrivateKey, encryptedPrivateKeyIv,
+      recoverySalt, encryptedPrivateKeyRecovery, encryptedPrivateKeyRecoveryIv,
+    } = req.body as Record<string, string>;
+
+    if (!publicKey || !passwordSalt || !encryptedPrivateKey || !encryptedPrivateKeyIv
+      || !recoverySalt || !encryptedPrivateKeyRecovery || !encryptedPrivateKeyRecoveryIv) {
+      res.status(400).json({ message: 'Missing key material' }); return;
+    }
+
+    const user = await User.findByIdAndUpdate(req.userId, {
+      encryptionSetUp: true,
+      publicKey, passwordSalt, encryptedPrivateKey, encryptedPrivateKeyIv,
+      recoverySalt, encryptedPrivateKeyRecovery, encryptedPrivateKeyRecoveryIv,
+    }, { new: true });
+    if (!user) { res.status(404).json({ message: 'User not found' }); return; }
+
+    res.json({ user: userPayload(user) });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// GET /api/auth/encryption-keys — fetch your own wrapped private key blob at
+// login time, so the browser can unlock it locally with the just-entered
+// password. Requires auth (the JWT proves this is genuinely your account).
+export const getEncryptionKeys = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.userId).select('encryptionSetUp publicKey passwordSalt encryptedPrivateKey encryptedPrivateKeyIv');
+    if (!user) { res.status(404).json({ message: 'User not found' }); return; }
+    if (!user.encryptionSetUp) { res.json({ encryptionSetUp: false }); return; }
+
+    res.json({
+      encryptionSetUp: true,
+      publicKey: user.publicKey,
+      passwordSalt: user.passwordSalt,
+      encryptedPrivateKey: user.encryptedPrivateKey,
+      encryptedPrivateKeyIv: user.encryptedPrivateKeyIv,
+    });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// POST /api/auth/regenerate-recovery — saves a freshly generated recovery
+// phrase's wrapped key blob (the actual private key is unchanged; only the
+// recovery lock on it is replaced, invalidating the old phrase).
+export const saveRegeneratedRecovery = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { recoverySalt, encryptedPrivateKeyRecovery, encryptedPrivateKeyRecoveryIv } = req.body as Record<string, string>;
+    if (!recoverySalt || !encryptedPrivateKeyRecovery || !encryptedPrivateKeyRecoveryIv) {
+      res.status(400).json({ message: 'Missing recovery key material' }); return;
+    }
+    const user = await User.findByIdAndUpdate(req.userId, {
+      recoverySalt, encryptedPrivateKeyRecovery, encryptedPrivateKeyRecoveryIv,
+    }, { new: true });
+    if (!user) { res.status(404).json({ message: 'User not found' }); return; }
+    res.json({ message: 'Recovery phrase updated' });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 export const completeProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const { role, strategy, aum, bio } = req.body as {
@@ -366,7 +456,10 @@ export const updateAvatar = async (req: Request, res: Response): Promise<void> =
 // since the whole premise here is an intentional change.
 export const changePassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
+    const { currentPassword, newPassword, passwordSalt, encryptedPrivateKey, encryptedPrivateKeyIv } = req.body as {
+      currentPassword: string; newPassword: string;
+      passwordSalt?: string; encryptedPrivateKey?: string; encryptedPrivateKeyIv?: string;
+    };
     if (!currentPassword || !newPassword) {
       res.status(400).json({ message: 'Current and new password are required' }); return;
     }
@@ -385,6 +478,14 @@ export const changePassword = async (req: Request, res: Response): Promise<void>
     }
 
     user.password = newPassword;
+    // The browser re-wraps the (unchanged) private key under the new
+    // password client-side — save that alongside the password itself,
+    // otherwise the stored key blob goes stale and becomes unreadable.
+    if (passwordSalt && encryptedPrivateKey && encryptedPrivateKeyIv) {
+      user.passwordSalt = passwordSalt;
+      user.encryptedPrivateKey = encryptedPrivateKey;
+      user.encryptedPrivateKeyIv = encryptedPrivateKeyIv;
+    }
     await user.save();
 
     res.json({ message: 'Password updated' });
@@ -405,12 +506,16 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) { res.json(genericMsg); return; }
 
-    const since10m = new Date(Date.now() - 10 * 60 * 1000);
-    const recent = await PasswordReset.findOne({ user: user._id, createdAt: { $gte: since10m } });
-    if (recent) {
-      const minutesLeft = Math.ceil((recent.createdAt.getTime() + 10 * 60 * 1000 - Date.now()) / 60000);
-      res.status(429).json({ message: `A reset link was already sent recently. Please wait ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} before requesting another.` });
-      return;
+    // TEMPORARY dev-only bypass — set DISABLE_RESET_COOLDOWN=true in .env to
+    // skip this cooldown entirely while testing. Remove/unset to restore.
+    if (process.env.DISABLE_RESET_COOLDOWN !== 'true') {
+      const since10m = new Date(Date.now() - 10 * 60 * 1000);
+      const recent = await PasswordReset.findOne({ user: user._id, createdAt: { $gte: since10m } });
+      if (recent) {
+        const minutesLeft = Math.ceil((recent.createdAt.getTime() + 10 * 60 * 1000 - Date.now()) / 60000);
+        res.status(429).json({ message: `A reset link was already sent recently. Please wait ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} before requesting another.` });
+        return;
+      }
     }
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -438,9 +543,51 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   }
 };
 
+// POST /api/auth/reset-recovery-info/:token
+// Public (the token itself, emailed to the account owner, is the proof of
+// identity here — same trust level as resetPassword below). Lets the reset
+// page fetch what it needs to let the user recover their encryption key
+// with their recovery phrase, alongside setting a new login password.
+// Takes newPassword in the body (not a query string) purely so it can also
+// report sameAsCurrentPassword up front — if the "new" password is really
+// the same as the old one, nothing about the key needs to change at all,
+// and the client shouldn't ask about (or act on) a recovery phrase for a
+// reset that isn't actually happening.
+export const getResetRecoveryInfo = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { newPassword } = req.body as { newPassword?: string };
+    const reset = await PasswordReset.findOne({ token: req.params.token });
+    if (!reset || reset.used || reset.expiresAt < new Date()) {
+      res.status(400).json({ message: 'This reset link is invalid or has expired.' }); return;
+    }
+    const user = await User.findById(reset.user);
+    if (!user) { res.status(404).json({ message: 'User not found' }); return; }
+
+    const sameAsCurrentPassword = newPassword ? await user.comparePassword(newPassword) : false;
+
+    if (!user.encryptionSetUp) { res.json({ encryptionSetUp: false, sameAsCurrentPassword }); return; }
+    res.json({
+      encryptionSetUp: true,
+      recoverySalt: user.recoverySalt,
+      encryptedPrivateKeyRecovery: user.encryptedPrivateKeyRecovery,
+      encryptedPrivateKeyRecoveryIv: user.encryptedPrivateKeyRecoveryIv,
+      sameAsCurrentPassword,
+    });
+  } catch {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token, newPassword, confirmSame } = req.body as { token: string; newPassword: string; confirmSame?: boolean };
+    const {
+      token, newPassword, confirmSame, passwordSalt, encryptedPrivateKey, encryptedPrivateKeyIv,
+      publicKey, recoverySalt, encryptedPrivateKeyRecovery, encryptedPrivateKeyRecoveryIv,
+    } = req.body as {
+      token: string; newPassword: string; confirmSame?: boolean;
+      passwordSalt?: string; encryptedPrivateKey?: string; encryptedPrivateKeyIv?: string;
+      publicKey?: string; recoverySalt?: string; encryptedPrivateKeyRecovery?: string; encryptedPrivateKeyRecoveryIv?: string;
+    };
     if (!token || !newPassword) {
       res.status(400).json({ message: 'Token and new password are required' }); return;
     }
@@ -466,6 +613,23 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     }
 
     user.password = newPassword;
+    // If the recovery-phrase flow recovered the private key client-side and
+    // re-wrapped it under the new password, save that alongside the password
+    // itself — otherwise the user keeps their old (now-inaccessible) wrapping.
+    if (passwordSalt && encryptedPrivateKey && encryptedPrivateKeyIv) {
+      user.passwordSalt = passwordSalt;
+      user.encryptedPrivateKey = encryptedPrivateKey;
+      user.encryptedPrivateKeyIv = encryptedPrivateKeyIv;
+    }
+    // No recovery phrase to recover the old key with — the client generated a
+    // brand new keypair instead so messages going forward stay encrypted.
+    // The old public key (and anything encrypted under it) is gone for good.
+    if (publicKey && recoverySalt && encryptedPrivateKeyRecovery && encryptedPrivateKeyRecoveryIv) {
+      user.publicKey = publicKey;
+      user.recoverySalt = recoverySalt;
+      user.encryptedPrivateKeyRecovery = encryptedPrivateKeyRecovery;
+      user.encryptedPrivateKeyRecoveryIv = encryptedPrivateKeyRecoveryIv;
+    }
     await user.save();
     reset.used = true;
     await reset.save();

@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 export const getComments = async (req: Request, res: Response): Promise<void> => {
   try {
     const comments = await Comment.find({ post: req.params.id })
-      .populate('author', 'username')
+      .populate('author', 'username avatar')
       .sort({ createdAt: 1 })
       .lean();
     res.json({ comments });
@@ -40,7 +40,7 @@ export const addComment = async (req: Request, res: Response): Promise<void> => 
       parent: parentId ? new mongoose.Types.ObjectId(parentId) : null,
       attachment,
     });
-    await comment.populate('author', 'username');
+    await comment.populate('author', 'username avatar');
 
     post.commentCount += 1;
     await post.save();

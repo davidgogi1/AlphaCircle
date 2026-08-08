@@ -4,6 +4,8 @@ import Sidebar from "./Sidebar";
 import SearchBar from "./SearchBar";
 //import RightSidebar from "./RightSidebar";
 import { useAuth } from "../../contexts/AuthContext";
+import RecoveryPhraseModal from "../RecoveryPhraseModal";
+import UserAvatar from "../UserAvatar";
 import "./Layout.css";
 
 export default function Layout() {
@@ -22,12 +24,18 @@ export default function Layout() {
               className="new-post-btn"
               onClick={() => navigate("/new-post")}
             >
-              ✏ New Post
+              <svg className="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              New Post
             </button>
             <div className="topbar-user">
-              <div className="topbar-avatar">
-                {user?.username.slice(0, 2).toUpperCase()}
-              </div>
+              <UserAvatar
+                username={user?.username ?? ''}
+                avatar={user?.avatar}
+                size={32}
+              />
               <span className="topbar-username">{user?.username}</span>
               <button
                 className="topbar-settings"
@@ -51,6 +59,7 @@ export default function Layout() {
         </div>
         {/* <RightSidebar /> */}
       </div>
+      <RecoveryPhraseModal />
     </div>
   );
 }

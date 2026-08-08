@@ -112,6 +112,25 @@
 .settings-submit:hover:not(:disabled) { filter: brightness(1.1); }
 .settings-submit:disabled { opacity: 0.55; cursor: not-allowed; }
 
+.settings-submit-secondary {
+  align-self: flex-start;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.settings-card-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.settings-card-hint {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
 @media (prefers-color-scheme: light) {
   .settings-field input { background: #fff; color: #000; }
 }

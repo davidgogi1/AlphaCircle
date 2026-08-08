@@ -4,8 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useGroupNotifications } from '../contexts/GroupNotificationsContext';
 import { api, apiUpload } from '../api';
 import ReactionPicker from '../components/feed/ReactionPicker';
+import UserAvatar from '../components/UserAvatar';
 import { EMOJI } from '../components/feed/reactions';
 import { extractConsensusLinkId } from '../utils/consensusLink';
+import {
+  importPublicKey, generateSessionKeyForRecipients, unwrapSessionKey,
+  encryptContentWithKey, decryptContentWithKey, encryptFileWithKey, decryptFileWithKey,
+  b64ToBuf, bufToB64,
+} from '../utils/crypto';
 import './ChatGroupsPage.css';
 
 function MessageContent({ content }: { content: string }) {
@@ -30,8 +36,17 @@ interface Member       { user: { _id: string; username: string }; status: string
 interface Group        { _id: string; name: string; creator: { _id: string; username: string }; members: Member[]; pendingAdminTransfer?: string; createdAt: string; }
 interface Attachment   { filename: string; originalname: string; mimetype: string; size: number; }
 interface Reaction     { user: string; type: string; }
-interface ReplyPreview { _id: string; content: string; sender: { _id: string; username: string }; }
-interface GroupMessage { _id: string; sender: { _id: string; username: string }; content: string; attachment?: Attachment; reactions: Reaction[]; replyTo?: ReplyPreview | null; createdAt: string; group?: string; }
+interface ReplyPreview {
+  _id: string; content: string; sender: { _id: string; username: string };
+  encrypted?: boolean; cipherText?: string; iv?: string; encryptedKeys?: Record<string, string>;
+}
+interface GroupMessage {
+  _id: string; sender: { _id: string; username: string; avatar?: string }; content: string; attachment?: Attachment;
+  encrypted?: boolean; cipherText?: string; iv?: string; encryptedKeys?: Record<string, string>;
+  encryptedAttachment?: { filename: string; size: number; iv: string; encryptedMeta: string; encryptedMetaIv: string };
+  reactions: Reaction[]; replyTo?: ReplyPreview | null; createdAt: string; group?: string;
+  decryptedAttachmentUrl?: string; decryptedAttachmentName?: string; decryptedAttachmentMimetype?: string;
+}
 interface UserRow      { _id: string; username: string; }
 
 function formatBytes(n: number) {
@@ -40,22 +55,22 @@ function formatBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function AttachmentView({ attachment, mine }: { attachment: Attachment; mine: boolean }) {
-  const url = `/uploads/${attachment.filename}`;
-  if (attachment.mimetype.startsWith('image/')) {
+interface AttachmentViewProps { url: string; name: string; mimetype: string; size: number; mine: boolean; }
+function AttachmentView({ url, name, mimetype, size, mine }: AttachmentViewProps) {
+  if (mimetype.startsWith('image/')) {
     return (
       <a href={url} target="_blank" rel="noreferrer" className="cg-att-img-link">
-        <img src={url} alt={attachment.originalname} className="cg-att-img" />
+        <img src={url} alt={name} className="cg-att-img" />
       </a>
     );
   }
-  const ext = attachment.originalname.split('.').pop()?.toUpperCase() ?? 'FILE';
+  const ext = name.split('.').pop()?.toUpperCase() ?? 'FILE';
   return (
-    <a href={url} download={attachment.originalname} className={`cg-att-doc ${mine ? 'mine' : 'theirs'}`}>
+    <a href={url} download={name} className={`cg-att-doc ${mine ? 'mine' : 'theirs'}`}>
       <span className="cg-att-doc-icon">📄</span>
       <div className="cg-att-doc-info">
-        <span className="cg-att-doc-name">{attachment.originalname}</span>
-        <span className="cg-att-doc-meta">{ext} · {formatBytes(attachment.size)}</span>
+        <span className="cg-att-doc-name">{name}</span>
+        <span className="cg-att-doc-meta">{ext} · {formatBytes(size)}</span>
       </div>
       <span className="cg-att-doc-dl">↓</span>
     </a>
@@ -70,7 +85,7 @@ function timeLabel(date: string) {
 }
 
 export default function ChatGroupsPage() {
-  const { user }                             = useAuth();
+  const { user, privateKey }                 = useAuth();
   const { refresh, setPendingCount, unreadCounts, markRead, socket } = useGroupNotifications();
 
   const [accepted,          setAccepted]          = useState<Group[]>([]);
@@ -107,6 +122,62 @@ export default function ChatGroupsPage() {
 
   useEffect(() => { activeGroupRef.current = activeGroup?._id ?? null; }, [activeGroup]);
 
+  // Decrypts a single group message (and its reply-quote, and any attachment)
+  // in place. Never touches the server — everything here runs in the browser.
+  const decryptMessage = async (msg: GroupMessage): Promise<GroupMessage> => {
+    let out = msg;
+
+    if (msg.replyTo?.encrypted && privateKey && user?.id) {
+      try {
+        const wrapped = msg.replyTo.encryptedKeys![user.id];
+        const replyKey = await unwrapSessionKey(wrapped, privateKey);
+        const decryptedReplyContent = await decryptContentWithKey(msg.replyTo.cipherText!, msg.replyTo.iv!, replyKey);
+        out = { ...out, replyTo: { ...msg.replyTo, content: decryptedReplyContent } };
+      } catch {
+        out = { ...out, replyTo: { ...msg.replyTo, content: '🔒 Unable to decrypt' } };
+      }
+    }
+
+    if (!msg.encrypted) return out;
+    if (!privateKey || !user?.id) return { ...out, content: '🔒 Locked — log in again to unlock' };
+
+    try {
+      // Unwrap the session key ONCE — the same key encrypted both the text
+      // and any attachment, so it's reused for both.
+      const wrappedKey = msg.encryptedKeys![user.id];
+      const sessionKey = await unwrapSessionKey(wrappedKey, privateKey);
+      const content = await decryptContentWithKey(msg.cipherText!, msg.iv!, sessionKey);
+      out = { ...out, content };
+
+      if (msg.encryptedAttachment) {
+        try {
+          const res = await fetch(`/uploads/${msg.encryptedAttachment.filename}`);
+          const ciphertextBuf = await res.arrayBuffer();
+          const { blob, name, mimetype } = await decryptFileWithKey({
+            ciphertext: bufToB64(ciphertextBuf),
+            iv: msg.encryptedAttachment.iv,
+            meta: msg.encryptedAttachment.encryptedMeta,
+            metaIv: msg.encryptedAttachment.encryptedMetaIv,
+          }, sessionKey);
+          out = {
+            ...out,
+            decryptedAttachmentUrl: URL.createObjectURL(blob),
+            decryptedAttachmentName: name,
+            decryptedAttachmentMimetype: mimetype,
+          };
+        } catch (err) {
+          console.error('Attachment decrypt failed:', err);
+        }
+      }
+    } catch (err) {
+      console.error('Message decrypt failed:', err);
+      out = { ...out, content: '🔒 Unable to decrypt this message' };
+    }
+    return out;
+  };
+
+  const decryptMessages = (msgs: GroupMessage[]) => Promise.all(msgs.map(decryptMessage));
+
   const loadGroups = () => {
     api.get('/groups').then(d => {
       setAccepted(d.accepted);
@@ -124,10 +195,11 @@ export default function ChatGroupsPage() {
   useEffect(() => {
     if (!socket) return;
 
-    const onMessage = (msg: GroupMessage) => {
+    const onMessage = async (msg: GroupMessage) => {
       if (msg.sender._id === user?.id) return;
       if ((msg.group ?? '') === activeGroupRef.current) {
-        setMessages(prev => [...prev, msg]);
+        const decrypted = await decryptMessage(msg);
+        setMessages(prev => [...prev, decrypted]);
         // Auto-mark-read since the user is actively watching this group
         markRead(activeGroupRef.current!);
       }
@@ -146,7 +218,7 @@ export default function ChatGroupsPage() {
       socket.off('group_message', onMessage);
       socket.off('group_message_reaction', onReaction);
     };
-  }, [socket, user?.id, markRead]);
+  }, [socket, user?.id, markRead, privateKey]);
 
   useEffect(() => {
     setReplyingTo(null);
@@ -154,9 +226,9 @@ export default function ChatGroupsPage() {
     setLoadingMsgs(true);
     markRead(activeGroup._id);
     api.get(`/groups/${activeGroup._id}/messages`)
-      .then(d => setMessages(d.messages))
+      .then(async d => setMessages(await decryptMessages(d.messages)))
       .finally(() => setLoadingMsgs(false));
-  }, [activeGroup, markRead]);
+  }, [activeGroup, markRead, privateKey]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -219,8 +291,45 @@ export default function ChatGroupsPage() {
     setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     try {
+      // Encrypt only if EVERY current accepted member has encryption set up —
+      // otherwise fall back to plain text exactly as before.
+      let recipients: { userId: string; publicKey: CryptoKey }[] | null = null;
+      if (privateKey && user?.id) {
+        try {
+          const memberIds = activeGroup.members.filter(m => m.status === 'accepted').map(m => m.user._id);
+          const { keys } = await api.post('/users/public-keys', { userIds: memberIds });
+          if (memberIds.every(id => keys[id])) {
+            recipients = await Promise.all(memberIds.map(async id => ({ userId: id, publicKey: await importPublicKey(keys[id]) })));
+          }
+        } catch { /* fall back to plaintext below */ }
+      }
+
       let data;
-      if (file) {
+      if (recipients) {
+        // One shared session key encrypts BOTH the text and the attachment
+        // (if any) — the same wrapped keys unlock both.
+        const { sessionKey, keys } = await generateSessionKeyForRecipients(recipients);
+        const { ciphertext, iv } = await encryptContentWithKey(text, sessionKey);
+        if (file) {
+          const fileEnvelope = await encryptFileWithKey(file, sessionKey);
+          const fd = new FormData();
+          fd.append('file', new Blob([b64ToBuf(fileEnvelope.ciphertext)]), 'encrypted.bin');
+          fd.append('encrypted', 'true');
+          fd.append('cipherText', ciphertext);
+          fd.append('iv', iv);
+          fd.append('encryptedKeys', JSON.stringify(keys));
+          fd.append('encryptedAttachmentIv', fileEnvelope.iv);
+          fd.append('encryptedAttachmentMeta', fileEnvelope.meta);
+          fd.append('encryptedAttachmentMetaIv', fileEnvelope.metaIv);
+          if (replyToId) fd.append('replyTo', replyToId);
+          data = await apiUpload('POST', `/groups/${activeGroup._id}/messages`, fd);
+        } else {
+          data = await api.post(`/groups/${activeGroup._id}/messages`, {
+            encrypted: true, cipherText: ciphertext, iv,
+            encryptedKeys: JSON.stringify(keys), replyTo: replyToId,
+          });
+        }
+      } else if (file) {
         const fd = new FormData();
         fd.append('file', file);
         if (text) fd.append('content', text);
@@ -229,7 +338,9 @@ export default function ChatGroupsPage() {
       } else {
         data = await api.post(`/groups/${activeGroup._id}/messages`, { content: text, replyTo: replyToId });
       }
-      setMessages(prev => [...prev, data.message]);
+
+      const decorated = await decryptMessage(data.message);
+      setMessages(prev => [...prev, decorated]);
     } catch {} finally {
       setSending(false);
     }
@@ -473,9 +584,11 @@ export default function ChatGroupsPage() {
                 return (
                   <div key={m._id} className={`cg-bubble-row ${mine ? 'mine' : 'theirs'}`}>
                     {!mine && (
-                      <div className="cg-bubble-avatar">
-                        {m.sender.username.slice(0, 2).toUpperCase()}
-                      </div>
+                      <UserAvatar
+                        username={m.sender.username}
+                        avatar={m.sender.avatar}
+                        size={28}
+                      />
                     )}
                     <div className="cg-bubble-wrap">
                       {!mine && <span className="cg-bubble-sender">{m.sender.username}</span>}
@@ -486,7 +599,22 @@ export default function ChatGroupsPage() {
                             <span className="cg-bubble-quote-text">{m.replyTo.content || '📎 Attachment'}</span>
                           </div>
                         )}
-                        {m.attachment && <AttachmentView attachment={m.attachment} mine={mine} />}
+                        {m.attachment && (
+                          <AttachmentView url={`/uploads/${m.attachment.filename}`} name={m.attachment.originalname} mimetype={m.attachment.mimetype} size={m.attachment.size} mine={mine} />
+                        )}
+                        {m.encryptedAttachment && (
+                          m.decryptedAttachmentUrl ? (
+                            <AttachmentView
+                              url={m.decryptedAttachmentUrl}
+                              name={m.decryptedAttachmentName ?? 'file'}
+                              mimetype={m.decryptedAttachmentMimetype ?? 'application/octet-stream'}
+                              size={m.encryptedAttachment.size}
+                              mine={mine}
+                            />
+                          ) : (
+                            <div className="cg-att-decrypting">🔒 Decrypting attachment…</div>
+                          )
+                        )}
                         {m.content && <MessageContent content={m.content} />}
                       </div>
                       {Object.keys(reactionCounts).length > 0 && (

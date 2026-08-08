@@ -19,6 +19,15 @@ export interface IUser extends Document {
   aum:             string;
   bio:             string;
   avatar:          string;
+  // End-to-end encryption key material (all opaque to the server)
+  encryptionSetUp:              boolean;
+  publicKey:                    string;
+  passwordSalt:                 string;
+  encryptedPrivateKey:          string;
+  encryptedPrivateKeyIv:        string;
+  recoverySalt:                 string;
+  encryptedPrivateKeyRecovery:   string;
+  encryptedPrivateKeyRecoveryIv: string;
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -39,6 +48,14 @@ const UserSchema = new Schema<IUser>({
   aum:             { type: String, default: '' },
   bio:             { type: String, default: '', maxlength: 160 },
   avatar:          { type: String, default: '' },
+  encryptionSetUp:              { type: Boolean, default: false },
+  publicKey:                    { type: String, default: '' },
+  passwordSalt:                 { type: String, default: '' },
+  encryptedPrivateKey:          { type: String, default: '' },
+  encryptedPrivateKeyIv:        { type: String, default: '' },
+  recoverySalt:                 { type: String, default: '' },
+  encryptedPrivateKeyRecovery:   { type: String, default: '' },
+  encryptedPrivateKeyRecoveryIv: { type: String, default: '' },
 });
 
 UserSchema.pre('save', async function (next) {

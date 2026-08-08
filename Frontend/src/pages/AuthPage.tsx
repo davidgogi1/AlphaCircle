@@ -1,5 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import RecoveryPhraseModal from '../components/RecoveryPhraseModal';
 import './AuthPage.css';
 
 type Mode = 'login' | 'register' | 'forgot';
@@ -11,7 +12,7 @@ interface InviteState {
 }
 
 export default function AuthPage() {
-  const { login, verifyLogin, register, forgotPassword, resetPassword } = useAuth();
+  const { login, verifyLogin, register, forgotPassword, resetPassword, pendingRecoveryPhrase } = useAuth();
 
   // AuthPage renders outside BrowserRouter, so URL params are read directly.
   const params       = new URLSearchParams(window.location.search);
@@ -33,12 +34,15 @@ export default function AuthPage() {
   const [forgotSent, setForgotSent] = useState('');
 
   const [resetPass, setResetPass]     = useState('');
+  const [resetRecoveryPhrase, setResetRecoveryPhrase] = useState('');
+  const [showRecoveryField, setShowRecoveryField] = useState(true);
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetConfirmingSame, setResetConfirmingSame] = useState(false);
+  const [resetConfirmingNoPhrase, setResetConfirmingNoPhrase] = useState(false);
   const [resetDone, setResetDone]     = useState(false);
 
   const [invite, setInvite] = useState<InviteState>({
-    status: tokenInUrl ? 'checking' : 'idle',
+    status: 'checking',
     email:  '',
     token:  tokenInUrl,
   });
@@ -46,25 +50,31 @@ export default function AuthPage() {
   // After a successful reset, land back on a clean login screen — auto-redirect
   // shortly after, but don't strand anyone waiting on it either.
   useEffect(() => {
-    if (!resetDone) return;
+    // If a fresh recovery phrase is pending, hold off redirecting until it's
+    // been shown and dismissed — otherwise it'd flash by unread.
+    if (!resetDone || pendingRecoveryPhrase) return;
     const t = setTimeout(() => { window.location.href = '/'; }, 2500);
     return () => clearTimeout(t);
-  }, [resetDone]);
+  }, [resetDone, pendingRecoveryPhrase]);
 
-  // Validate the invite token if present in URL
+  // Validate the invite token — always, even with no token in the URL, so
+  // that if invite-only registration is temporarily disabled server-side
+  // (DISABLE_INVITE_REQUIREMENT), plain visits to the root page can register
+  // too, not just links with a real (or placeholder) ?invite= token. When
+  // invite-only is enforced normally, a request with no real token still
+  // correctly comes back invalid, same as it always did.
   useEffect(() => {
-    if (!tokenInUrl) return;
-    fetch(`/api/invites/validate/${tokenInUrl}`)
+    fetch(`/api/invites/validate/${tokenInUrl || 'none'}`)
       .then(r => r.json())
       .then(data => {
         if (data.valid) {
           setInvite({ status: 'valid', email: data.email, token: tokenInUrl });
-          setEmail(data.email);
+          if (data.email) setEmail(data.email);
         } else {
-          setInvite({ status: 'invalid', email: '', token: tokenInUrl });
+          setInvite({ status: tokenInUrl ? 'invalid' : 'idle', email: '', token: tokenInUrl });
         }
       })
-      .catch(() => setInvite({ status: 'invalid', email: '', token: tokenInUrl }));
+      .catch(() => setInvite({ status: tokenInUrl ? 'invalid' : 'idle', email: '', token: tokenInUrl }));
   }, [tokenInUrl]);
 
   const switchMode = (m: Mode) => { setMode(m); setError(''); };
@@ -102,7 +112,7 @@ export default function AuthPage() {
     setError('');
     setLoading(true);
     try {
-      await verifyLogin(pendingLoginId, code.trim());
+      await verifyLogin(pendingLoginId, code.trim(), password);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Verification failed');
     } finally {
@@ -132,12 +142,15 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const result = await resetPassword(resetToken, resetPass, confirmSame);
-      if (result.sameAsCurrentPassword) {
+      const result = await resetPassword(resetToken, resetPass, confirmSame, resetRecoveryPhrase, resetConfirmingNoPhrase);
+      if (result.needsPhraseConfirmation) {
+        setResetConfirmingNoPhrase(true);
+      } else if (result.sameAsCurrentPassword) {
         setResetConfirmingSame(true);
       } else {
         setResetDone(true);
         setResetConfirmingSame(false);
+        setResetConfirmingNoPhrase(false);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to reset password');
@@ -176,7 +189,7 @@ export default function AuthPage() {
     }
 
     // valid — show form
-    const hasRealToken = !!invite.token;
+    const hasRealToken = !!invite.token && !!invite.email;
     return (
       <>
         {hasRealToken && (
@@ -300,13 +313,38 @@ export default function AuthPage() {
                 <span onClick={() => { window.location.href = '/'; }}>Go to login now →</span>
               </p>
             </>
+          ) : resetConfirmingNoPhrase ? (
+            <>
+              <div className="auth-invite-status idle">
+                <span className="auth-invite-icon">⚠️</span>
+                <div>
+                  <div className="auth-invite-title">Continue without a recovery phrase?</div>
+                  <div className="auth-invite-sub">
+                    Without it, we'll generate you a brand new encryption key so new messages keep getting encrypted — but everything encrypted under your old key (all messages sent or received before now) stays locked forever. This can't be undone later.
+                  </div>
+                </div>
+              </div>
+              {error && <div className="auth-error">{error}</div>}
+              <div className="auth-form">
+                <button
+                  className="auth-submit"
+                  disabled={loading}
+                  onClick={(e) => handleResetSubmit(e as unknown as FormEvent, resetConfirmingSame)}
+                >
+                  {loading ? 'Please wait…' : 'Continue anyway'}
+                </button>
+                <p className="auth-switch">
+                  <span onClick={() => setResetConfirmingNoPhrase(false)}>← Go back and enter my phrase</span>
+                </p>
+              </div>
+            </>
           ) : resetConfirmingSame ? (
             <>
               <div className="auth-invite-status idle">
                 <span className="auth-invite-icon">🤔</span>
                 <div>
                   <div className="auth-invite-title">Same as your current password</div>
-                  <div className="auth-invite-sub">Are you sure you want to keep it?</div>
+                  <div className="auth-invite-sub">Are you sure you want to keep it? Since it's not actually changing, your encrypted messages are unaffected either way.</div>
                 </div>
               </div>
               {error && <div className="auth-error">{error}</div>}
@@ -343,6 +381,27 @@ export default function AuthPage() {
                   required
                 />
               </div>
+
+              {!showRecoveryField ? (
+                <p className="auth-switch">
+                  <span onClick={() => setShowRecoveryField(true)}>Have a recovery phrase? Use it to keep your encrypted messages readable →</span>
+                </p>
+              ) : (
+                <div className="auth-field">
+                  <label>Recovery phrase (optional)</label>
+                  <textarea
+                    className="auth-recovery-input"
+                    placeholder="Enter your 16-word recovery phrase, separated by spaces"
+                    value={resetRecoveryPhrase}
+                    onChange={e => { setResetRecoveryPhrase(e.target.value); setResetConfirmingNoPhrase(false); }}
+                    rows={2}
+                  />
+                  <span className="auth-field-hint">
+                    Without this, you'll still be able to log in, but any previously encrypted messages will no longer be readable.
+                  </span>
+                </div>
+              )}
+
               {error && <div className="auth-error">{error}</div>}
               <button className="auth-submit" type="submit" disabled={loading}>
                 {loading ? 'Please wait…' : 'Reset Password'}
@@ -350,6 +409,7 @@ export default function AuthPage() {
             </form>
           )}
         </div>
+        <RecoveryPhraseModal />
       </div>
     );
   }

@@ -7,6 +7,14 @@ export interface IAttachment {
   size:         number;
 }
 
+export interface IEncryptedAttachment {
+  filename:        string;
+  size:            number;
+  iv:              string;
+  encryptedMeta:   string;
+  encryptedMetaIv: string;
+}
+
 export interface IReaction {
   user: Types.ObjectId;
   type: string;
@@ -17,6 +25,11 @@ export interface IChatGroupMessage extends Document {
   sender:     Types.ObjectId;
   content:    string;
   attachment?: IAttachment;
+  encrypted:          boolean;
+  cipherText:         string;
+  iv:                 string;
+  encryptedKeys:      Map<string, string>; // userId -> RSA-wrapped AES session key, one per current member
+  encryptedAttachment?: IEncryptedAttachment;
   reactions:  Types.DocumentArray<IReaction & { _id: Types.ObjectId }>;
   replyTo:    Types.ObjectId | null;
   createdAt:  Date;
@@ -27,6 +40,14 @@ const AttachmentSchema = new Schema<IAttachment>({
   originalname: { type: String, required: true },
   mimetype:     { type: String, required: true },
   size:         { type: Number, required: true },
+}, { _id: false });
+
+const EncryptedAttachmentSchema = new Schema<IEncryptedAttachment>({
+  filename:        { type: String, required: true },
+  size:            { type: Number, required: true },
+  iv:              { type: String, required: true },
+  encryptedMeta:   { type: String, required: true },
+  encryptedMetaIv: { type: String, required: true },
 }, { _id: false });
 
 const ReactionSchema = new Schema<IReaction>(
@@ -40,6 +61,11 @@ const ChatGroupMessageSchema = new Schema<IChatGroupMessage>({
   sender:     { type: Schema.Types.ObjectId, ref: 'User',      required: true },
   content:    { type: String, default: '', trim: true, maxlength: 2000 },
   attachment: { type: AttachmentSchema, default: undefined },
+  encrypted:      { type: Boolean, default: false },
+  cipherText:     { type: String, default: '' },
+  iv:             { type: String, default: '' },
+  encryptedKeys:  { type: Map, of: String, default: undefined },
+  encryptedAttachment: { type: EncryptedAttachmentSchema, default: undefined },
   reactions:  { type: [ReactionSchema], default: [] },
   replyTo:    { type: Schema.Types.ObjectId, ref: 'ChatGroupMessage', default: null },
   createdAt:  { type: Date, default: Date.now },
